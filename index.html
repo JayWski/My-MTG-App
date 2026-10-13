@@ -33,17 +33,25 @@ async function init(){const{data}=await sb.auth.getSession();data.session?home()
 function auth(msg=''){app.innerHTML=`<h1>Card Ledger</h1><p class="mute">Sign in to see your collections and decks on every device.</p><input id="em" type="email" placeholder="Email"><input id="pw" type="password" placeholder="Password (6+ characters)"><p class="down">${esc(msg)}</p><button class="p" id="in">Sign in</button> <button id="up">Create account</button>`;
 $('in').onclick=async()=>{const{error}=await sb.auth.signInWithPassword({email:$('em').value,password:$('pw').value});error?auth(error.message):home()};
 $('up').onclick=async()=>{const{data,error}=await sb.auth.signUp({email:$('em').value,password:$('pw').value});error?auth(error.message):data.session?home():auth('Check your email to confirm, then sign in.')}}
-async function home(){cur=null;const deck=tab=='deck',nm=deck?'deck':'collection';
+const tabsHtml=()=>`<div class="top"><h1>Card Ledger</h1><button id="out">Sign out</button></div><div class="tabs"><button data-t="collection" class="${tab=='collection'?'on':''}">Collections</button><button data-t="deck" class="${tab=='deck'?'on':''}">Decks</button><button data-t="search" class="${tab=='search'?'on':''}">Find a card</button></div>`;
+function bindTabs(){app.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{tab=b.dataset.t;home()});$('out').onclick=async()=>{await sb.auth.signOut();auth()}}
+let lastQ='';
+async function home(){cur=null;if(tab=='search')return finder();const deck=tab=='deck',nm=deck?'deck':'collection';
 const{data}=await sb.from('collections').select('*').eq('kind',tab).order('created_at');
 const rows=(data||[]).map(c=>`<div class="row"><button class="link grow" data-id="${c.id}">${esc(c.name)}</button><button data-del="${c.id}" aria-label="Delete ${esc(c.name)}">Delete</button></div>`).join('')||`<p class="mute">No ${nm}s yet. Name your first one below.</p>`;
-app.innerHTML=`<div class="top"><h1>Card Ledger</h1><button id="out">Sign out</button></div>
-<div class="tabs"><button data-t="collection" class="${deck?'':'on'}">Collections</button><button data-t="deck" class="${deck?'on':''}">Decks</button></div>
-${rows}<p><input id="nm" placeholder="${deck?'New deck, e.g. Atraxa EDH':'New collection, e.g. Trade binder'}"><button class="p" id="mk">Create ${nm}</button></p>`;
-app.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{tab=b.dataset.t;home()});
-$('out').onclick=async()=>{await sb.auth.signOut();auth()};
+app.innerHTML=`${tabsHtml()}${rows}<p><input id="nm" placeholder="${deck?'New deck, e.g. Atraxa EDH':'New collection, e.g. Trade binder'}"><button class="p" id="mk">Create ${nm}</button></p>`;
+bindTabs();
 $('mk').onclick=async()=>{if($('nm').value.trim()){await sb.from('collections').insert({name:$('nm').value.trim(),kind:tab});home()}};
 app.querySelectorAll('[data-id]').forEach(b=>b.onclick=()=>open(data.find(c=>c.id==b.dataset.id)));
 app.querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{if(confirm(`Delete this ${nm} and its cards?`)){await sb.from('collections').delete().eq('id',b.dataset.del);home()}})}
+function finder(){app.innerHTML=`${tabsHtml()}<input id="fq" autocomplete="off" placeholder="Type a card name, e.g. Sol Ring" value="${esc(lastQ)}"><div id="fr"></div>`;bindTabs();
+const run=async()=>{lastQ=$('fq').value.trim();const r=$('fr');if(lastQ.length<2){r.innerHTML='<p class="mute">Type at least 2 letters to search your collections and decks.</p>';return}
+const[{data:es},{data:cs}]=await Promise.all([sb.from('entries').select('*').ilike('name','%'+lastQ.replace(/[%_]/g,'')+'%'),sb.from('collections').select('id,name,kind')]);
+const cn=Object.fromEntries((cs||[]).map(c=>[c.id,c])),g={};(es||[]).forEach(e=>(g[e.name]??=[]).push(e));
+const names=Object.keys(g).sort();
+r.innerHTML=names.length?names.map(n=>{const L=g[n];return`<div class="row" data-sid="${L[0].scryfall_id}" style="align-items:flex-start"><img class="th" loading="lazy" alt="" src="${pic(L[0].scryfall_id)}"><div class="grow"><b>${esc(n)}</b> <span class="mute">· ${L.reduce((a,e)=>a+e.qty,0)} total in ${L.length} place${L.length>1?'s':''}</span>${L.map(e=>{const c=cn[e.collection_id]||{},dk=c.kind=='deck';return`<div><button class="link" data-go="${e.collection_id}">${esc(c.name)}</button> <span class="mute">${dk?'Deck':'Collection'} · ${esc(e.set_code).toUpperCase()} #${esc(e.collector)} · ${e.finish} · ×${e.qty}${dk&&e.owned===false?' · need to buy':''}${e.is_commander?' · commander':''}</span></div>`}).join('')}</div></div>`}).join(''):`<p class="mute">No card matching “${esc(lastQ)}” in your collections or decks.</p>`;
+r.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>open(cn[b.dataset.go]))};
+let t;$('fq').oninput=()=>{clearTimeout(t);t=setTimeout(run,250)};$('fq').onkeydown=e=>{if(e.key=='Enter')run()};if(lastQ)run();$('fq').focus()}
 function spark(v){if(v.length<2)return'<svg class="sp"></svg>';const lo=Math.min(...v),hi=Math.max(...v),r=hi-lo||1;
 const p=v.map((y,i)=>`${(i/(v.length-1)*62+1).toFixed(1)},${(18-(y-lo)/r*16).toFixed(1)}`).join(' ');
 return`<svg class="sp" viewBox="0 0 64 20"><polyline points="${p}" fill="none" stroke="currentColor" stroke-width="1.6" class="${v.at(-1)>=v[0]?'up':'down'}"/></svg>`}
@@ -54,10 +62,14 @@ async function open(c){cur=c;tab=c.kind;const deck=c.kind=='deck';const{data:es}
 const ids=[...new Set(es.map(e=>e.scryfall_id))];let ps=[];
 if(ids.length){const r=await sb.from('prices').select('*').in('scryfall_id',ids).order('snap_date');ps=r.data||[]}
 const H={};ps.forEach(p=>(H[p.scryfall_id+p.finish]??=[]).push({d:p.snap_date,usd:+p.usd}));
+const inD={};if(!deck&&es.length){const{data:dk}=await sb.from('collections').select('id,name').eq('kind','deck');
+if(dk?.length){const dn=Object.fromEntries(dk.map(d=>[d.id,d.name])),{data:de}=await sb.from('entries').select('name,collection_id').in('collection_id',dk.map(d=>d.id)).in('name',[...new Set(es.map(e=>e.name))]);
+(de||[]).forEach(x=>{(inD[x.name]??=new Set()).add(dn[x.collection_id])})}}
+const decksFor=n=>`<div class="mute">${inD[n]?'In decks: '+[...inD[n]].map(d=>esc(d)).join(', '):'Not in any deck'}</div>`;
 let total=0,need=0,needN=0;
 const row=e=>{const h=H[e.scryfall_id+e.finish]||[],now=h.at(-1)?.usd,buy=deck&&e.owned===false;if(now){total+=now*e.qty;if(buy)need+=now*e.qty}if(buy)needN+=e.qty;
 const x=deck?`<div><button class="sm ${buy?'down':''}" data-own="${e.id}">${buy?'Need to buy':'Owned'}</button> <button class="sm" data-cmd="${e.id}">${e.is_commander?'Unset commander':'Make commander'}</button></div>`:'';
-return`<div class="row" data-sid="${e.scryfall_id}"><img class="th" loading="lazy" alt="" src="${pic(e.scryfall_id)}"><div class="grow"><b>${esc(e.name)}</b><div class="mute">${esc(e.set_code).toUpperCase()} #${esc(e.collector)} · ${e.finish}${e.details?' · '+esc(e.details):''}</div>${x}</div>
+return`<div class="row" data-sid="${e.scryfall_id}"><img class="th" loading="lazy" alt="" src="${pic(e.scryfall_id)}"><div class="grow"><b>${esc(e.name)}</b><div class="mute">${esc(e.set_code).toUpperCase()} #${esc(e.collector)} · ${e.finish}${e.details?' · '+esc(e.details):''}</div>${x}${deck?'':decksFor(e.name)}</div>
 ${spark(h.map(y=>y.usd))}<div class="num">${money(now)}<div class="mute">${fmt(chg(h,7))||'new'} wk · ${fmt(chg(h,28))||'–'} 4wk</div></div>
 <div><button data-q="${e.id}:-1" aria-label="Remove one">−</button> ${e.qty} <button data-q="${e.id}:1" aria-label="Add one">+</button></div></div>`};
 const cm=es.filter(e=>e.is_commander),rest=es.filter(e=>!e.is_commander);
