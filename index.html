@@ -23,7 +23,15 @@ h3{font:600 17px Georgia,serif;margin:18px 0 0}.sm{padding:3px 8px;font-size:12p
 #hm{position:fixed;inset:0;background:#000a;display:flex;align-items:center;justify-content:center;z-index:20;padding:16px}
 #hm>div{background:var(--panel);color:var(--ink);border-radius:10px;max-width:420px;width:100%;max-height:80vh;display:flex;flex-direction:column;padding:16px}
 #hm .sc{overflow:auto;margin:10px 0}table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left}th{position:sticky;top:0;background:var(--panel)}
-</style></head><body><main id="app"></main><img id="pv" alt="">
+#top{position:fixed;right:max(16px,env(safe-area-inset-right));bottom:max(16px,env(safe-area-inset-bottom));width:48px;height:48px;border-radius:50%;padding:0;display:none;align-items:center;justify-content:center;background:var(--acc);color:var(--bg);border:0;box-shadow:0 4px 14px #0006;font-size:24px;line-height:1;z-index:10;cursor:pointer}#top.show{display:flex}
+.seg{display:inline-flex;margin:10px 0}.seg button{border-radius:0;padding:6px 14px}.seg button:first-child{border-radius:6px 0 0 6px}.seg button:last-child{border-radius:0 6px 6px 0;border-left:0}.seg button[aria-pressed=true]{background:var(--acc);color:var(--bg)}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:10px}
+@media(min-width:700px){.grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.gc{display:flex;flex-direction:column;gap:4px}.gi{width:100%;aspect-ratio:488/680;border-radius:5%/3.6%;background:var(--line);display:block}
+.gp{font-size:16px}.gn{line-height:1.3;overflow-wrap:anywhere}.gq{margin-top:2px}
+.dd{position:relative;display:inline-block;margin:10px 0}.ddm{position:absolute;left:0;top:100%;margin-top:4px;background:var(--panel);border:1px solid var(--ink);border-radius:6px;min-width:170px;z-index:12;padding:4px;box-shadow:0 6px 18px #0005}
+.ddm button{display:block;width:100%;text-align:left;border:0;padding:8px 10px}.ddm button[aria-checked=true]{font-weight:700}
+</style></head><body><main id="app"></main><img id="pv" alt=""><button id="top" aria-label="Back to top" title="Back to top">↑</button>
 <script>
 const SB_URL='https://wihratryjsmcbpsistkj.supabase.co',SB_KEY='sb_publishable_6k9ibJeQe9iDIxYOCxgPPA_tJTjth8f';
 const sb=supabase.createClient(SB_URL,SB_KEY),app=document.getElementById('app');
@@ -31,7 +39,7 @@ const COL={nonfoil:'usd',foil:'usd_foil',etched:'usd_etched'};
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const $=id=>document.getElementById(id),money=n=>n==null?'–':'$'+n.toFixed(2);
 const pic=id=>`https://cards.scryfall.io/small/front/${id[0]}/${id[1]}/${id}.jpg`;
-let cur=null,tab='collection';
+let cur=null,tab='collection',view='list';try{view=localStorage.getItem('view')||'list'}catch{}
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 async function init(){const{data}=await sb.auth.getSession();data.session?home():auth()}
 function auth(msg=''){app.innerHTML=`<h1>Card Ledger</h1><p class="mute">Sign in to see your collections and decks on every device.</p><input id="em" type="email" placeholder="Email"><input id="pw" type="password" placeholder="Password (6+ characters)"><p class="down">${esc(msg)}</p><button class="p" id="in">Sign in</button> <button id="up">Create account</button>`;
@@ -73,15 +81,19 @@ const decksFor=n=>`<div class="mute">${inD[n]?'In decks: '+[...inD[n]].map(d=>es
 let total=0,need=0,needN=0;
 const row=e=>{const h=H[e.scryfall_id+e.finish]||[],now=h.at(-1)?.usd,buy=deck&&e.owned===false;if(now){total+=now*e.qty;if(buy)need+=now*e.qty}if(buy)needN+=e.qty;
 const x=deck?`<div><button class="sm ${buy?'down':''}" data-own="${e.id}">${buy?'Need to buy':'Owned'}</button> <button class="sm" data-cmd="${e.id}">${e.is_commander?'Unset commander':'Make commander'}</button></div>`:'';
-return`<div class="row" data-sid="${e.scryfall_id}"><img class="th" loading="lazy" alt="" src="${pic(e.scryfall_id)}"><div class="grow"><b>${esc(e.name)}</b><div class="mute">${esc(e.set_code).toUpperCase()} #${esc(e.collector)} · ${e.finish}${e.details?' · '+esc(e.details):''}</div>${x}${deck?'':decksFor(e.name)}</div>
-${spark(h.map(y=>y.usd))}<div class="num"><button class="pbtn" data-hist="${e.id}" aria-label="Price history for ${esc(e.name)}">${money(now)}</button><div class="mute">${fmt(chg(h,7))||'new'} wk · ${fmt(chg(h,28))||'–'} 4wk</div></div>
+if(view=='grid')return`<div class="gc"><img class="gi" loading="lazy" alt="${esc(e.name)}" src="${big(e.scryfall_id)}"><div class="gp"><button class="pbtn" data-hist="${e.id}" aria-label="Price history for ${esc(e.name)}">${money(now)}</button> <span class="mute">${fmt(chg(h,7))||'new'} wk</span></div><div class="mute gn"><b>${esc(e.name)}</b><br>${esc(e.set_code).toUpperCase()} #${esc(e.collector)} · ${e.finish}${e.details?' · '+esc(e.details):''}</div>${x}${deck?'':decksFor(e.name)}<div class="gq"><button data-q="${e.id}:-1" aria-label="Remove one">−</button> ${e.qty} <button data-q="${e.id}:1" aria-label="Add one">+</button></div></div>`;
+return`<div class="row" data-sid="${e.scryfall_id}">${view=='text'?'':`<img class="th" loading="lazy" alt="" src="${pic(e.scryfall_id)}">`}<div class="grow"><b>${esc(e.name)}</b><div class="mute">${esc(e.set_code).toUpperCase()} #${esc(e.collector)} · ${e.finish}${e.details?' · '+esc(e.details):''}</div>${x}${deck?'':decksFor(e.name)}</div>
+${view=='text'?'':spark(h.map(y=>y.usd))}<div class="num"><button class="pbtn" data-hist="${e.id}" aria-label="Price history for ${esc(e.name)}">${money(now)}</button><div class="mute">${fmt(chg(h,7))||'new'} wk · ${fmt(chg(h,28))||'–'} 4wk</div></div>
 <div><button data-q="${e.id}:-1" aria-label="Remove one">−</button> ${e.qty} <button data-q="${e.id}:1" aria-label="Add one">+</button></div></div>`};
+const wrap=a=>a.length?(view=='grid'?`<div class="grid">${a.map(row).join('')}</div>`:a.map(row).join('')):'';
 const cm=es.filter(e=>e.is_commander),rest=es.filter(e=>!e.is_commander);
-const body=deck?`<h3>Commander</h3>${cm.map(row).join('')||'<p class="mute">No commander yet. Tap “Make commander” on a card below.</p>'}<h3>Main deck</h3>${rest.map(row).join('')||'<p class="mute">No other cards yet.</p>'}`:(es.map(row).join('')||'<p class="mute">Empty. Use “Add card” to search by name and pick a printing.</p>');
+const body=deck?`<h3>Commander</h3>${wrap(cm)||'<p class="mute">No commander yet. Tap “Make commander” on a card below.</p>'}<h3>Main deck</h3>${wrap(rest)||'<p class="mute">No other cards yet.</p>'}`:(wrap(es)||'<p class="mute">Empty. Use “Add card” to search by name and pick a printing.</p>');
 const n=es.reduce((a,e)=>a+e.qty,0);
 const info=deck?`<div class="mute"><b class="${n==100?'up':n>100?'down':''}">${n} / 100 cards</b> · ${n<100?(100-n)+' to go':n>100?(n-100)+' over':'deck is full'}</div><div class="mute">${needN?`Still need ${needN} card${needN>1?'s':''} · ${money(need)} to buy`:'You own every card in this deck'}</div>`:`<div class="mute">${n} cards, latest prices</div>`;
-app.innerHTML=`<div class="top"><button id="bk">Back to ${deck?'decks':'collections'}</button><button class="p" id="ad">Add card</button></div><h2>${esc(c.name)}</h2><div class="total">${money(total)}</div>${info}${body}`;
+app.innerHTML=`<div class="top"><button id="bk">Back to ${deck?'decks':'collections'}</button><button class="p" id="ad">Add card</button></div><h2>${esc(c.name)}</h2><div class="total">${money(total)}</div>${info}<div class="dd"><button id="ddb" aria-haspopup="true" aria-expanded="false">Display Options ▾</button><div class="ddm" id="ddm" role="menu" hidden>${[['list','List'],['grid','Grid'],['text','Text only']].map(([v,l])=>`<button role="menuitemradio" aria-checked="${view==v}" data-v="${v}">${view==v?'✓ ':''}${l}</button>`).join('')}</div></div>${body}`;
 app.querySelectorAll('[data-hist]').forEach(b=>b.onclick=()=>{const e=es.find(x=>x.id==b.dataset.hist);showHist(e,H[e.scryfall_id+e.finish]||[])});
+app.querySelectorAll('[data-v]').forEach(b=>b.onclick=()=>{view=b.dataset.v;try{localStorage.setItem('view',view)}catch{}open(c)});
+$('ddb').onclick=()=>{const m=$('ddm');m.hidden=!m.hidden;$('ddb').setAttribute('aria-expanded',String(!m.hidden))};
 $('bk').onclick=home;$('ad').onclick=search;
 app.querySelectorAll('[data-q]').forEach(b=>b.onclick=async()=>{const[id,d]=b.dataset.q.split(':'),e=es.find(x=>x.id==id),q=e.qty+ +d;
 q<1?await sb.from('entries').delete().eq('id',id):await sb.from('entries').update({qty:q}).eq('id',id);open(c)});
@@ -117,5 +129,10 @@ const pv=document.getElementById('pv'),big=id=>`https://cards.scryfall.io/normal
 app.addEventListener('mouseover',e=>{const r=e.target.closest('[data-sid]');if(r){pv.src=big(r.dataset.sid);pv.style.display='block'}else pv.style.display='none'});
 app.addEventListener('mousemove',e=>{if(pv.style.display=='block'){pv.style.left=Math.min(e.clientX+20,innerWidth-264)+'px';pv.style.top=Math.max(8,Math.min(e.clientY-170,innerHeight-350))+'px'}});
 app.addEventListener('mouseleave',()=>pv.style.display='none');
+const tb=document.getElementById('top');
+addEventListener('scroll',()=>tb.classList.toggle('show',scrollY>300),{passive:true});
+tb.onclick=()=>scrollTo({top:0,behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'auto':'smooth'});
+document.addEventListener('click',e=>{const m=$('ddm');if(m&&!e.target.closest('.dd')){m.hidden=true;$('ddb').setAttribute('aria-expanded','false')}});
+document.addEventListener('keydown',e=>{const m=$('ddm');if(e.key=='Escape'&&m&&!m.hidden){m.hidden=true;$('ddb').setAttribute('aria-expanded','false');$('ddb').focus()}});
 init();
 </script></body></html>
