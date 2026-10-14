@@ -50,7 +50,7 @@ function bindTabs(){app.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{t
 let lastQ='';
 async function home(){cur=null;if(tab=='search')return finder();const deck=tab=='deck',nm=deck?'deck':'collection';
 const{data}=await sb.from('collections').select('*').eq('kind',tab).order('created_at');
-const rows=(data||[]).map(c=>`<div class="row"><button class="link grow" data-id="${c.id}">${esc(c.name)}</button><button data-del="${c.id}" aria-label="Delete ${esc(c.name)}">Delete</button></div>`).join('')||`<p class="mute">No ${nm}s yet. Name your first one below.</p>`;
+const rows=(data||[]).map(c=>`<div class="row">${c.thumb_id?`<img class="th" data-id="${c.id}" style="cursor:pointer" loading="lazy" alt="" src="${pic(c.thumb_id)}">`:'<div class="th"></div>'}<button class="link grow" data-id="${c.id}">${esc(c.name)}</button><button data-del="${c.id}" aria-label="Delete ${esc(c.name)}">Delete</button></div>`).join('')||`<p class="mute">No ${nm}s yet. Name your first one below.</p>`;
 app.innerHTML=`${tabsHtml()}${rows}<p><input id="nm" placeholder="${deck?'New deck, e.g. Atraxa EDH':'New collection, e.g. Trade binder'}"><button class="p" id="mk">Create ${nm}</button></p>`;
 bindTabs();
 $('mk').onclick=async()=>{if($('nm').value.trim()){await sb.from('collections').insert({name:$('nm').value.trim(),kind:tab});home()}};
@@ -58,7 +58,7 @@ app.querySelectorAll('[data-id]').forEach(b=>b.onclick=()=>open(data.find(c=>c.i
 app.querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{if(confirm(`Delete this ${nm} and its cards?`)){await sb.from('collections').delete().eq('id',b.dataset.del);home()}})}
 function finder(){app.innerHTML=`${tabsHtml()}<input id="fq" autocomplete="off" placeholder="Type a card name, e.g. Sol Ring" value="${esc(lastQ)}"><div id="fr"></div>`;bindTabs();
 const run=async()=>{lastQ=$('fq').value.trim();const r=$('fr');if(lastQ.length<2){r.innerHTML='<p class="mute">Type at least 2 letters to search your collections and decks.</p>';return}
-const[{data:es},{data:cs}]=await Promise.all([sb.from('entries').select('*').ilike('name','%'+lastQ.replace(/[%_]/g,'')+'%'),sb.from('collections').select('id,name,kind')]);
+const[{data:es},{data:cs}]=await Promise.all([sb.from('entries').select('*').ilike('name','%'+lastQ.replace(/[%_]/g,'')+'%'),sb.from('collections').select('id,name,kind,thumb_id')]);
 const cn=Object.fromEntries((cs||[]).map(c=>[c.id,c])),g={};(es||[]).forEach(e=>(g[e.name]??=[]).push(e));
 const names=Object.keys(g).sort();
 r.innerHTML=names.length?names.map(n=>{const L=g[n];return`<div class="row" data-sid="${L[0].scryfall_id}" style="align-items:flex-start"><img class="th" loading="lazy" alt="" src="${pic(L[0].scryfall_id)}"><div class="grow"><b>${esc(n)}</b> <span class="mute">· ${L.reduce((a,e)=>a+e.qty,0)} total in ${L.length} place${L.length>1?'s':''}</span>${L.map(e=>{const c=cn[e.collection_id]||{},dk=c.kind=='deck';return`<div><button class="link" data-go="${e.collection_id}">${esc(c.name)}</button> <span class="mute">${dk?'Deck':'Collection'} · ${esc(e.set_code).toUpperCase()} #${esc(e.collector)} · ${e.finish} · ×${e.qty}${dk&&e.owned===false?' · need to buy':''}${e.is_commander?' · commander':''}</span></div>`}).join('')}</div></div>`}).join(''):`<p class="mute">No card matching “${esc(lastQ)}” in your collections or decks.</p>`;
@@ -80,7 +80,8 @@ if(dk?.length){const dn=Object.fromEntries(dk.map(d=>[d.id,d.name])),{data:de}=a
 const decksFor=n=>`<div class="mute">${inD[n]?'In decks: '+[...inD[n]].map(d=>esc(d)).join(', '):'Not in any deck'}</div>`;
 let total=0,need=0,needN=0;
 const row=e=>{const h=H[e.scryfall_id+e.finish]||[],now=h.at(-1)?.usd,buy=deck&&e.owned===false;if(now){total+=now*e.qty;if(buy)need+=now*e.qty}if(buy)needN+=e.qty;
-const x=deck?`<div><button class="sm ${buy?'down':''}" data-own="${e.id}">${buy?'Need to buy':'Owned'}</button> <button class="sm" data-cmd="${e.id}">${e.is_commander?'Unset commander':'Make commander'}</button></div>`:'';
+const tb=`<button class="sm" data-th="${e.id}">${c.thumb_id==e.scryfall_id?'Unset thumbnail':'Set as thumbnail'}</button>`;
+const x=`<div>${deck?`<button class="sm ${buy?'down':''}" data-own="${e.id}">${buy?'Need to buy':'Owned'}</button> <button class="sm" data-cmd="${e.id}">${e.is_commander?'Unset commander':'Make commander'}</button> `:''}${tb}</div>`;
 if(view=='grid')return`<div class="gc"><img class="gi" loading="lazy" alt="${esc(e.name)}" src="${big(e.scryfall_id)}"><div class="gp"><button class="pbtn" data-hist="${e.id}" aria-label="Price history for ${esc(e.name)}">${money(now)}</button> <span class="mute">${fmt(chg(h,7))||'new'} wk</span></div><div class="mute gn"><b>${esc(e.name)}</b><br>${esc(e.set_code).toUpperCase()} #${esc(e.collector)} · ${e.finish}${e.details?' · '+esc(e.details):''}</div>${x}${deck?'':decksFor(e.name)}<div class="gq"><button data-q="${e.id}:-1" aria-label="Remove one">−</button> ${e.qty} <button data-q="${e.id}:1" aria-label="Add one">+</button></div></div>`;
 return`<div class="row" data-sid="${e.scryfall_id}">${view=='text'?'':`<img class="th" loading="lazy" alt="" src="${pic(e.scryfall_id)}">`}<div class="grow"><b>${esc(e.name)}</b><div class="mute">${esc(e.set_code).toUpperCase()} #${esc(e.collector)} · ${e.finish}${e.details?' · '+esc(e.details):''}</div>${x}${deck?'':decksFor(e.name)}</div>
 ${view=='text'?'':spark(h.map(y=>y.usd))}<div class="num"><button class="pbtn" data-hist="${e.id}" aria-label="Price history for ${esc(e.name)}">${money(now)}</button><div class="mute">${fmt(chg(h,7))||'new'} wk · ${fmt(chg(h,28))||'–'} 4wk</div></div>
@@ -93,6 +94,7 @@ const info=deck?`<div class="mute"><b class="${n==100?'up':n>100?'down':''}">${n
 app.innerHTML=`<div class="top"><button id="bk">Back to ${deck?'decks':'collections'}</button><button class="p" id="ad">Add card</button></div><h2>${esc(c.name)}</h2><div class="total">${money(total)}</div>${info}<div class="dd"><button id="ddb" aria-haspopup="true" aria-expanded="false">Display Options ▾</button><div class="ddm" id="ddm" role="menu" hidden>${[['list','List'],['grid','Grid'],['text','Text only']].map(([v,l])=>`<button role="menuitemradio" aria-checked="${view==v}" data-v="${v}">${view==v?'✓ ':''}${l}</button>`).join('')}</div></div>${body}`;
 app.querySelectorAll('[data-hist]').forEach(b=>b.onclick=()=>{const e=es.find(x=>x.id==b.dataset.hist);showHist(e,H[e.scryfall_id+e.finish]||[])});
 app.querySelectorAll('[data-v]').forEach(b=>b.onclick=()=>{view=b.dataset.v;try{localStorage.setItem('view',view)}catch{}open(c)});
+app.querySelectorAll('[data-th]').forEach(b=>b.onclick=async()=>{const e=es.find(x=>x.id==b.dataset.th),id=c.thumb_id==e.scryfall_id?null:e.scryfall_id;await sb.from('collections').update({thumb_id:id}).eq('id',c.id);c.thumb_id=id;open(c)});
 $('ddb').onclick=()=>{const m=$('ddm');m.hidden=!m.hidden;$('ddb').setAttribute('aria-expanded',String(!m.hidden))};
 $('bk').onclick=home;$('ad').onclick=search;
 app.querySelectorAll('[data-q]').forEach(b=>b.onclick=async()=>{const[id,d]=b.dataset.q.split(':'),e=es.find(x=>x.id==id),q=e.qty+ +d;
