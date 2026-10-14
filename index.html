@@ -39,7 +39,7 @@ const COL={nonfoil:'usd',foil:'usd_foil',etched:'usd_etched'};
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const $=id=>document.getElementById(id),money=n=>n==null?'–':'$'+n.toFixed(2);
 const pic=id=>`https://cards.scryfall.io/small/front/${id[0]}/${id[1]}/${id}.jpg`;
-let cur=null,tab='collection',view='list';try{view=localStorage.getItem('view')||'list'}catch{}
+let cur=null,tab='collection',view=matchMedia('(max-width:699px)').matches?'grid':'list';try{view=localStorage.getItem('view')||view}catch{}
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 async function init(){const{data}=await sb.auth.getSession();data.session?home():auth()}
 function auth(msg=''){app.innerHTML=`<h1>Card Ledger</h1><p class="mute">Sign in to see your collections and decks on every device.</p><input id="em" type="email" placeholder="Email"><input id="pw" type="password" placeholder="Password (6+ characters)"><p class="down">${esc(msg)}</p><button class="p" id="in">Sign in</button> <button id="up">Create account</button>`;
