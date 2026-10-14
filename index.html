@@ -31,6 +31,7 @@ h3{font:600 17px Georgia,serif;margin:18px 0 0}.sm{padding:3px 8px;font-size:12p
 .gp{font-size:16px}.gn{line-height:1.3;overflow-wrap:anywhere}.gq{margin-top:2px}
 .dd{position:relative;display:inline-block;margin:10px 8px 10px 0}.ddm{position:absolute;left:0;top:100%;margin-top:4px;background:var(--panel);border:1px solid var(--ink);border-radius:6px;min-width:170px;z-index:12;padding:4px;box-shadow:0 6px 18px #0005}
 .ddm button{display:block;width:100%;text-align:left;border:0;padding:8px 10px}.ddm button[aria-checked=true]{font-weight:700}
+.dg{display:inline-flex;align-items:center;gap:6px;margin:8px 16px 8px 0}.dg .dd{margin:0}.dl{font-weight:600}
 </style></head><body><main id="app"></main><img id="pv" alt=""><button id="top" aria-label="Back to top" title="Back to top">↑</button>
 <script>
 const SB_URL='https://wihratryjsmcbpsistkj.supabase.co',SB_KEY='sb_publishable_6k9ibJeQe9iDIxYOCxgPPA_tJTjth8f';
@@ -42,6 +43,7 @@ const catOf=e=>{const t=(e.type_line||'').split(' // ')[0].split('—')[0].trim(
 const COLN={W:'White',U:'Blue',B:'Black',R:'Red',G:'Green'},COLO=['White','Blue','Black','Red','Green','Multicolor','Colorless'],RAR=['Common','Uncommon','Rare','Mythic','Special','Bonus'];
 const GL=[['none','None'],['type','Type'],['subtype','Subtype'],['color','Color'],['mv','Mana Value'],['rarity','Rarity'],['set','Set'],['artist','Artist']];
 const SL=[['mv','Mana Value'],['az','Alphabetical'],['rarity','Rarity'],['color','Color']];
+const dd=(lab,items,cur,attr)=>{const nm=esc((items.find(i=>i[0]==cur)||['',''])[1]);return`<span class="dg"><span class="dl">${lab}:</span><div class="dd"><button aria-haspopup="true" aria-expanded="false" aria-label="${lab}: ${nm}">${nm} ▾</button><div class="ddm" role="menu" hidden>${items.map(([v,l])=>`<button role="menuitemradio" aria-checked="${cur==v}" ${attr}="${v}">${cur==v?'✓ ':''}${l}</button>`).join('')}</div></div></span>`};
 const rarR=e=>{const i=['common','uncommon','rare','mythic','special','bonus'].indexOf(e.rarity);return i<0?99:i};
 const colR=e=>{const c=(e.colors||'').split(',').filter(Boolean);return c.length>1?5:c.length?'WUBRG'.indexOf(c[0]):6};
 const byName=(a,b)=>a.name.localeCompare(b.name);
@@ -115,12 +117,11 @@ const groups=a=>{const g={};a.forEach(e=>{const k=keyOf(e);(g[k]??={k,s:sortOf(e
 return Object.values(g).sort((x,y)=>typeof x.s=='number'&&typeof y.s=='number'?x.s-y.s:String(x.s).localeCompare(String(y.s)))};
 const gh=a=>groups(a).map(({k,a})=>`<h3>${esc(k)} <span class="mute">(${a.reduce((n,e)=>n+e.qty,0)})</span></h3>${wrap(a)}`).join('');
 const cats=!rest.length?'<p class="mute">No other cards yet.</p>':grp=='none'?`<h3>Main deck</h3>${wrap(rest)}`:gh(rest);
-const gdd=`<div class="dd"><button aria-haspopup="true" aria-expanded="false">Grouping ▾</button><div class="ddm" role="menu" hidden>${GL.map(([v,l])=>`<button role="menuitemradio" aria-checked="${grp==v}" data-g="${v}">${grp==v?'✓ ':''}${l}</button>`).join('')}</div></div>`;
-const sdd=`<div class="dd"><button aria-haspopup="true" aria-expanded="false">Sort ▾</button><div class="ddm" role="menu" hidden>${SL.map(([v,l])=>`<button role="menuitemradio" aria-checked="${srt==v}" data-s="${v}">${srt==v?'✓ ':''}${l}</button>`).join('')}</div></div>`;
+const gdd=dd('Group',GL,grp,'data-g'),sdd=dd('Sort',SL,srt,'data-s');
 const body=deck?`<h3>Commander</h3>${wrap(cm)||'<p class="mute">No commander yet. Tap “Make commander” on a card below.</p>'}${cats}`:(es.length?(grp=='none'?wrap(es):gh(es)):'<p class="mute">Empty. Use “Add card” to search by name and pick a printing.</p>');
 const n=es.reduce((a,e)=>a+e.qty,0);
 const info=deck?`<div class="mute"><b class="${n==100?'up':n>100?'down':''}">${n} / 100 cards</b> · ${n<100?(100-n)+' to go':n>100?(n-100)+' over':'deck is full'}</div><div class="mute">${needN?`Still need ${needN} card${needN>1?'s':''} · ${money(need)} to buy`:'You own every card in this deck'}</div>`:`<div class="mute">${n} cards, latest prices</div>`;
-app.innerHTML=`<div class="top"><button id="bk">Back to ${deck?'decks':'collections'}</button><button class="p" id="ad">Add card</button></div><h2>${esc(c.name)}</h2><div class="total">${money(total)}</div>${info}<div class="dd"><button id="ddb" aria-haspopup="true" aria-expanded="false">Display Options ▾</button><div class="ddm" id="ddm" role="menu" hidden>${[['list','List'],['grid','Grid'],['text','Text only']].map(([v,l])=>`<button role="menuitemradio" aria-checked="${view==v}" data-v="${v}">${view==v?'✓ ':''}${l}</button>`).join('')}</div></div>${gdd}${sdd}${body}`;
+app.innerHTML=`<div class="top"><button id="bk">Back to ${deck?'decks':'collections'}</button><button class="p" id="ad">Add card</button></div><h2>${esc(c.name)}</h2><div class="total">${money(total)}</div>${info}${dd('Display',[['list','List'],['grid','Grid'],['text','Text only']],view,'data-v')}${gdd}${sdd}${body}`;
 app.querySelectorAll('[data-hist]').forEach(b=>b.onclick=()=>{const e=es.find(x=>x.id==b.dataset.hist);showHist(e,H[e.scryfall_id+e.finish]||[])});
 app.querySelectorAll('[data-v]').forEach(b=>b.onclick=()=>{view=b.dataset.v;try{localStorage.setItem('view',view)}catch{}open(c)});
 app.querySelectorAll('[data-th]').forEach(b=>b.onclick=async()=>{const e=es.find(x=>x.id==b.dataset.th),id=c.thumb_id==e.scryfall_id?null:e.scryfall_id;await sb.from('collections').update({thumb_id:id}).eq('id',c.id);c.thumb_id=id;open(c)});
