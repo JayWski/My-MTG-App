@@ -113,6 +113,24 @@ const n=rows.reduce((a,x)=>a+x.qty,0);
 r.innerHTML=`<p class="up"><b>Imported ${n} cards</b> (${rows.length} different) into “${esc(nm)}”.</p>${j.missing.length?`<p class="down">Couldn't find ${j.missing.length}: ${j.missing.map(t=>esc(t)).join(', ')}</p>`:''}${j.skipped?`<p class="mute">Skipped ${j.skipped} sideboard or maybeboard cards.</p>`:''}<button class="p" id="op">Open deck</button>`;
 $('op').onclick=()=>open(col)
 }catch(e){if(col)await sb.from('collections').delete().eq('id',col.id);r.innerHTML=`<p class="down">${esc(e.message||e)}</p>`;$('go').disabled=false}}
+const fieldsOf=c=>({name:c.name,type_line:c.type_line||c.card_faces?.[0]?.type_line||null,colors:(c.colors||c.card_faces?.[0]?.colors||[]).join(','),cmc:c.cmc,rarity:c.rarity,set_name:c.set_name,artist:c.artist||c.card_faces?.[0]?.artist||null,set_code:c.set,collector:c.collector_number,details:[c.full_art&&'full art',c.border_color=='borderless'&&'borderless',c.promo&&'promo'].filter(Boolean).join(', ')});
+async function swapScreen(e,c){app.innerHTML=`<div class="top"><button id="bk">Back to ${esc(c.name)}</button></div><h2>Change printing</h2><div class="mute"><b>${esc(e.name)}</b> · now ${esc(e.set_code).toUpperCase()} #${esc(e.collector)} · ${e.finish}. Pick the printing to use instead. Quantity, owned and commander settings stay as they are.</div><div id="res"><p class="mute">Loading printings…</p></div>`;
+$('bk').onclick=()=>open(c);
+let url=`https://api.scryfall.com/cards/search?unique=prints&order=released&include_extras=true&q=${encodeURIComponent('!"'+e.name+'"')}`;const cards=[];
+for(let i=0;url&&i<5;i++){const r=await fetch(url);if(!r.ok)break;const j=await r.json();cards.push(...j.data);url=j.has_more?j.next_page:null}
+const res=$('res');if(!cards.length){res.innerHTML='<p class="down">Could not load printings for this card. Please try again later.</p>';return}
+window._s=cards;
+res.innerHTML=cards.map((k,i)=>{const d=[k.full_art&&'full art',k.border_color=='borderless'&&'borderless',k.promo&&'promo',...(k.frame_effects||[])].filter(Boolean).join(', ');
+return`<div class="row" data-sid="${k.id}"><img class="th" loading="lazy" alt="" src="${pic(k.id)}"><div class="grow"><b>${esc(k.set_name)}</b><div class="mute">${k.set.toUpperCase()} #${esc(k.collector_number)}${d?' · '+esc(d):''}</div></div>
+${k.finishes.map(f=>{const cur=k.id==e.scryfall_id&&f==e.finish;return`<button data-a="${i}:${f}" ${cur?'disabled':''}>${cur?'✓ current':f+' '+money(+k.prices[COL[f]]||null)}</button>`}).join(' ')}</div>`}).join('');
+res.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>doSwap(e,c,b))}
+async function doSwap(e,c,b){const[i,f]=b.dataset.a.split(':'),k=window._s[i];document.querySelectorAll('[data-a]').forEach(x=>x.disabled=true);
+const ex=await sb.from('entries').select('id,qty,is_commander').eq('collection_id',c.id).eq('scryfall_id',k.id).eq('finish',f).neq('id',e.id);
+if(ex.data?.length){const t=ex.data[0];await sb.from('entries').update({qty:t.qty+e.qty,is_commander:t.is_commander||e.is_commander}).eq('id',t.id);await sb.from('entries').delete().eq('id',e.id)}
+else await sb.from('entries').update({scryfall_id:k.id,finish:f,...fieldsOf(k)}).eq('id',e.id);
+const p=+k.prices[COL[f]];if(p)await sb.from('prices').upsert({scryfall_id:k.id,finish:f,snap_date:new Date().toLocaleDateString('en-CA',{timeZone:'America/New_York'}),usd:p},{ignoreDuplicates:true,onConflict:'scryfall_id,finish,snap_date'});
+if(c.thumb_id==e.scryfall_id){await sb.from('collections').update({thumb_id:k.id}).eq('id',c.id);c.thumb_id=k.id}
+open(c)}
 function finder(){app.innerHTML=`${tabsHtml()}<input id="fq" autocomplete="off" placeholder="Type a card name, e.g. Sol Ring" value="${esc(lastQ)}"><div id="fr"></div>`;bindTabs();
 const run=async()=>{lastQ=$('fq').value.trim();const r=$('fr');if(lastQ.length<2){r.innerHTML='<p class="mute">Type at least 2 letters to search your collections and decks.</p>';return}
 const[{data:es},{data:cs}]=await Promise.all([sb.from('entries').select('*').ilike('name','%'+lastQ.replace(/[%_]/g,'')+'%'),sb.from('collections').select('id,name,kind,thumb_id')]);
@@ -138,7 +156,7 @@ const decksFor=n=>`<div class="mute">${inD[n]?'In decks: '+[...inD[n]].map(d=>es
 let total=0,need=0,needN=0;
 const row=e=>{const h=H[e.scryfall_id+e.finish]||[],now=h.at(-1)?.usd,buy=deck&&e.owned===false;if(now){total+=now*e.qty;if(buy)need+=now*e.qty}if(buy)needN+=e.qty;
 const tb=`<button class="sm" data-th="${e.id}">${c.thumb_id==e.scryfall_id?'Unset thumbnail':'Set as thumbnail'}</button>`;
-const x=`<div>${deck?`<button class="sm ${buy?'down':''}" data-own="${e.id}">${buy?'Need to buy':'Owned'}</button> <button class="sm" data-cmd="${e.id}">${e.is_commander?'Unset commander':'Make commander'}</button> `:''}${tb}</div>`;
+const x=`<div>${deck?`<button class="sm ${buy?'down':''}" data-own="${e.id}">${buy?'Need to buy':'Owned'}</button> <button class="sm" data-cmd="${e.id}">${e.is_commander?'Unset commander':'Make commander'}</button> `:''}${tb} <button class="sm" data-sw="${e.id}">Change printing</button></div>`;
 if(view=='grid')return`<div class="gc"><img class="gi" loading="lazy" alt="${esc(e.name)}" src="${big(e.scryfall_id)}"><div class="gp"><button class="pbtn" data-hist="${e.id}" aria-label="Price history for ${esc(e.name)}">${money(now)}</button> <span class="mute">${fmt(chg(h,7))||'new'} wk</span></div><div class="mute gn"><b>${esc(e.name)}</b><br>${esc(e.set_code).toUpperCase()} #${esc(e.collector)} · ${e.finish}${e.details?' · '+esc(e.details):''}</div>${x}${deck?'':decksFor(e.name)}<div class="gq"><button data-q="${e.id}:-1" aria-label="Remove one">−</button> ${e.qty} <button data-q="${e.id}:1" aria-label="Add one">+</button></div></div>`;
 return`<div class="row" data-sid="${e.scryfall_id}">${view=='text'?'':`<img class="th" loading="lazy" alt="" src="${pic(e.scryfall_id)}">`}<div class="grow"><b>${esc(e.name)}</b><div class="mute">${esc(e.set_code).toUpperCase()} #${esc(e.collector)} · ${e.finish}${e.details?' · '+esc(e.details):''}</div>${x}${deck?'':decksFor(e.name)}</div>
 ${view=='text'?'':spark(h.map(y=>y.usd))}<div class="num"><button class="pbtn" data-hist="${e.id}" aria-label="Price history for ${esc(e.name)}">${money(now)}</button><div class="mute">${fmt(chg(h,7))||'new'} wk · ${fmt(chg(h,28))||'–'} 4wk</div></div>
@@ -157,6 +175,7 @@ const info=deck?`<div class="mute"><b class="${n==100?'up':n>100?'down':''}">${n
 app.innerHTML=`<div class="top"><button id="bk">Back to ${deck?'decks':'collections'}</button><button class="p" id="ad">Add card</button></div><h2>${esc(c.name)}</h2><div class="total">${money(total)}</div>${info}${dd('Display',[['list','List'],['grid','Grid'],['text','Text only']],view,'data-v')}${gdd}${sdd}${body}`;
 app.querySelectorAll('[data-hist]').forEach(b=>b.onclick=()=>{const e=es.find(x=>x.id==b.dataset.hist);showHist(e,H[e.scryfall_id+e.finish]||[])});
 app.querySelectorAll('[data-v]').forEach(b=>b.onclick=()=>{view=b.dataset.v;try{localStorage.setItem('view',view)}catch{}open(c)});
+app.querySelectorAll('[data-sw]').forEach(b=>b.onclick=()=>swapScreen(es.find(x=>x.id==b.dataset.sw),c));
 app.querySelectorAll('[data-th]').forEach(b=>b.onclick=async()=>{const e=es.find(x=>x.id==b.dataset.th),id=c.thumb_id==e.scryfall_id?null:e.scryfall_id;await sb.from('collections').update({thumb_id:id}).eq('id',c.id);c.thumb_id=id;open(c)});
 app.querySelectorAll('.dd>button').forEach(b=>b.onclick=()=>{const m=b.nextElementSibling;closeMenus(m);m.hidden=!m.hidden;if(!m.hidden){m.style.left='0';m.style.right='auto';if(m.getBoundingClientRect().right>innerWidth-8){m.style.left='auto';m.style.right='0'}}b.setAttribute('aria-expanded',String(!m.hidden))});
 app.querySelectorAll('[data-s]').forEach(b=>b.onclick=()=>{srt=b.dataset.s;try{localStorage.setItem('sort',srt)}catch{}open(c)});
