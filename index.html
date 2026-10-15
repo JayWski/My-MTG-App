@@ -88,7 +88,7 @@ const rs=F.restr&&F.key&&es.some(e=>e.name==n&&e.legalities?.[F.key]=='restricte
 const lim=LIM[n]??(rs?1:F.copies);if(lim!=null&&k>lim)over.push(`${esc(n)} ×${k} (max ${lim})`)}
 if(over.length)out.push(['err',`<b>Too many copies:</b> ${over.join(', ')}`]);
 if(F.cmdr){const cm=main.filter(e=>e.is_commander),k=q(cm);
-if(k<F.cmdr[0])out.push(['warn',F.oath?'Choose your Oathbreaker (a planeswalker) and signature spell (an instant or sorcery) with Make commander.':'Choose your commander: tap Make commander on a card.']);
+if(k<F.cmdr[0])out.push(['warn',F.oath?'Choose your Oathbreaker (a planeswalker) and signature spell (an instant or sorcery) with Make commander.':'Choose your commander with the Choose Commander button in the Commander section.']);
 else if(k>F.cmdr[1])out.push(['err',`<b>Too many commanders:</b> ${k} (max ${F.cmdr[1]}).`]);
 if(F.oath&&cm.length){const pw=cm.some(e=>(e.type_line||'').includes('Planeswalker')),sp=cm.some(e=>/Instant|Sorcery/.test(e.type_line||''));if(!pw||!sp)out.push(['err','<b>Oathbreaker needs</b> one planeswalker and one signature spell (instant or sorcery).'])}
 const src=F.oath?cm.filter(e=>(e.type_line||'').includes('Planeswalker')):cm;
@@ -127,13 +127,21 @@ $('up').onclick=async()=>{const{data,error}=await sb.auth.signUp({email:$('em').
 const tabsHtml=()=>`<div class="top"><h1>Card Ledger</h1><button id="out">Sign out</button></div><div class="tabs"><button data-t="collection" class="${tab=='collection'?'on':''}">Collections</button><button data-t="deck" class="${tab=='deck'?'on':''}">Decks</button><button data-t="search" class="${tab=='search'?'on':''}">Find a card</button></div>`;
 function bindTabs(){app.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{tab=b.dataset.t;home()});$('out').onclick=async()=>{await sb.auth.signOut();auth()}}
 let lastQ='';
-async function home(){cur=null;ret=0;if(tab=='search')return finder();const deck=tab=='deck',nm=deck?'deck':'collection';
+async function home(){cur=null;ret=0;pickedCmd=null;if(tab=='search')return finder();const deck=tab=='deck',nm=deck?'deck':'collection';
 const{data}=await sb.from('collections').select('*').eq('kind',tab).order('created_at');
 const rows=(data||[]).map(c=>`<div class="row">${c.thumb_id?`<img class="th" data-id="${c.id}" style="cursor:pointer" loading="lazy" alt="" src="${pic(c.thumb_id)}">`:'<div class="th"></div>'}<button class="link grow" data-id="${c.id}">${esc(c.name)}</button><button data-del="${c.id}" aria-label="Delete ${esc(c.name)}">Delete</button></div>`).join('')||`<p class="mute">No ${nm}s yet. Name your first one below.</p>`;
-app.innerHTML=`${tabsHtml()}${rows}<p><input id="nm" placeholder="${deck?'New deck, e.g. Atraxa EDH':'New collection, e.g. Trade binder'}">${deck?`<select id="nf" class="fs" aria-label="Deck format">${Object.entries(FMT).map(([k,v])=>`<option value="${k}">${v.n}</option>`).join('')}</select>`:''}<button class="p" id="mk">Create ${nm}</button>${deck?' <button id="imp">Import a deck</button>':''}</p>`;
+app.innerHTML=`${tabsHtml()}${rows}<p><input id="nm" placeholder="${deck?'New deck, e.g. Atraxa EDH':'New collection, e.g. Trade binder'}">${deck?`<select id="nf" class="fs" aria-label="Deck format">${Object.entries(FMT).map(([k,v])=>`<option value="${k}">${v.n}</option>`).join('')}</select>`:''}</p><div id="cmw"></div><p><button class="p" id="mk">Create ${nm}</button>${deck?' <button id="imp">Import a deck</button>':''}</p>`;
 bindTabs();
 if(deck)$('imp').onclick=importScreen;
-$('mk').onclick=async()=>{if($('nm').value.trim()){await sb.from('collections').insert({name:$('nm').value.trim(),kind:tab,...(tab=='deck'?{format:$('nf').value,format_opts:$('nf').value=='custom'?{min:60,max:null,copies:4,side:15}:null}:{})});home()}};
+$('mk').onclick=async()=>{const nmv=$('nm').value.trim();if(!nmv)return;const f=deck?$('nf').value:null;
+const r=await sb.from('collections').insert({name:nmv,kind:tab,...(deck?{format:f,format_opts:f=='custom'?{min:60,max:null,copies:4,side:15}:null}:{})}).select().single();
+const pc=pickedCmd;pickedCmd=null;
+if(r.data&&deck&&pc){const fin=(pc.finishes||[]).includes('nonfoil')?'nonfoil':(pc.finishes||['nonfoil'])[0],p=+pc.prices[COL[fin]];
+await sb.from('entries').insert({collection_id:r.data.id,scryfall_id:pc.id,finish:fin,qty:1,board:'main',ownership:'owned',is_commander:true,...fieldsOf(pc)});
+if(p)await sb.from('prices').upsert({scryfall_id:pc.id,finish:fin,snap_date:new Date().toLocaleDateString('en-CA',{timeZone:'America/New_York'}),usd:p},{ignoreDuplicates:true});
+await sb.from('collections').update({thumb_id:pc.id}).eq('id',r.data.id);r.data.thumb_id=pc.id;open(r.data);return}
+home()};
+if(deck){$('nf').onchange=()=>{pickedCmd=null;cmdUI()};cmdUI()}
 app.querySelectorAll('[data-id]').forEach(b=>b.onclick=()=>open(data.find(c=>c.id==b.dataset.id)));
 app.querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{if(confirm(`Delete this ${nm} and its cards?`)){await sb.from('collections').delete().eq('id',b.dataset.del);home()}})}
 function importScreen(){app.innerHTML=`<div class="top"><button id="bk">Back to decks</button></div><h2>Import a deck</h2>
@@ -197,6 +205,30 @@ $('bk').onclick=()=>open(c);
 app.querySelectorAll('[data-dg]').forEach(b=>b.onclick=()=>{if(confirm('Delete this group? Cards keep their tags, but the group disappears.')){delete cg[names[b.dataset.dg]];save()}});
 app.querySelectorAll('[data-rt]').forEach(b=>b.onclick=()=>{const[i,j]=b.dataset.rt.split(':');cg[names[i]].splice(j,1);save()});
 app.querySelectorAll('[data-at]').forEach(b=>b.onclick=()=>{const i=b.dataset.at,v=$('nt'+i).value.trim();if(v&&!cg[names[i]].includes(v)){cg[names[i]].push(v);save()}})}
+let pickedCmd=null,cmT;
+function cmdUI(){const w=$('cmw'),sel=$('nf');if(!w)return;const F=sel?FMT[sel.value]:null;
+if(!F||!F.cmdr||F.oath){pickedCmd=null;w.innerHTML='';return}
+const brawl=F.n.includes('Brawl');
+const go=async()=>{const t=$('cq').value.trim().replace(/"/g,''),r=$('cr');if(t.length<2){r.innerHTML='';return}
+r.innerHTML='<p class="mute">Searching…</p>';
+const q=(brawl?'(t:legendary (t:creature or t:planeswalker))':'is:commander')+` name:"${t}" game:paper`;
+const res=await fetch(`https://api.scryfall.com/cards/search?unique=cards&order=name&q=${encodeURIComponent(q)}`);
+if(!res.ok){r.innerHTML='<p class="mute">No commanders found.</p>';return}
+const j=await res.json();window._cm=j.data.slice(0,10);
+r.innerHTML=window._cm.map((k,i)=>`<div class="row" data-sid="${k.id}"><img class="th" loading="lazy" alt="" src="${pic(k.id)}"><div class="grow"><b>${esc(k.name)}</b><div class="mute">${esc(k.type_line)}</div></div><button data-pc="${i}">Select</button></div>`).join('');
+r.querySelectorAll('[data-pc]').forEach(b=>b.onclick=()=>{pickedCmd=window._cm[b.dataset.pc];draw()})};
+const draw=()=>{w.innerHTML=pickedCmd?`<div class="row"><img class="th" alt="" src="${pic(pickedCmd.id)}"><div class="grow"><b>${esc(pickedCmd.name)}</b><div class="mute">Commander · ${esc(pickedCmd.set_name)} #${esc(pickedCmd.collector_number)}</div></div><button id="cx">Change</button></div>`:`<label class="mute" for="cq">Commander (optional): search Scryfall</label><input id="cq" autocomplete="off" placeholder="Type a commander's name, e.g. Atraxa"><div id="cr"></div>`;
+if(pickedCmd){$('cx').onclick=()=>{pickedCmd=null;draw()};return}
+$('cq').oninput=()=>{clearTimeout(cmT);cmT=setTimeout(go,300)}};
+draw()}
+function cmdPicker(c,es,F,tid){scrollTo(0,0);const bw=F.n.includes('Brawl');
+const isC=e=>{const t=(e.type_line||'').split(' // ')[0];return t.includes('Legendary')&&(t.includes('Creature')||(bw&&t.includes('Planeswalker')))};
+const cm=es.filter(e=>e.is_commander&&e.board!='side'),cand=es.filter(e=>e.board!='side'&&!e.is_commander&&isC(e)).sort(byName),partner=!!tid&&F.cmdr[1]>1&&cm.length<F.cmdr[1];
+app.innerHTML=`<div class="top"><button id="bk">Back to ${esc(c.name)}</button></div><h2>${tid?'Swap Commander':'Choose Commander'}</h2><p class="mute">Pick a legendary ${bw?'creature or planeswalker':'creature'} that is in your deck.</p>${cand.map(e=>`<div class="row" data-sid="${e.scryfall_id}"><img class="th" loading="lazy" alt="" src="${pic(e.scryfall_id)}"><div class="grow"><b>${esc(e.name)}</b><div class="mute">${esc(e.type_line||'')}</div></div><button data-pk="${e.id}">${tid?'Swap in':'Make commander'}</button>${partner?` <button data-pp="${e.id}">Add as partner</button>`:''}</div>`).join('')||'<p class="mute">There are no legendary creatures in your deck yet. Use Add card to add one, then come back.</p>'}`;
+$('bk').onclick=()=>open(c);
+const set=(id,v)=>sb.from('entries').update({is_commander:v}).eq('id',id);
+app.querySelectorAll('[data-pk]').forEach(b=>b.onclick=async()=>{const e=es.find(z=>z.id==b.dataset.pk),old=tid&&es.find(z=>z.id==tid);if(old)await set(old.id,false);await set(e.id,true);if(old&&c.thumb_id==old.scryfall_id){await sb.from('collections').update({thumb_id:e.scryfall_id}).eq('id',c.id);c.thumb_id=e.scryfall_id}open(c)});
+app.querySelectorAll('[data-pp]').forEach(b=>b.onclick=async()=>{await set(b.dataset.pp,true);open(c)})}
 function finder(){ret=0;app.innerHTML=`${tabsHtml()}<input id="fq" autocomplete="off" placeholder="Type a card name, e.g. Sol Ring" value="${esc(lastQ)}"><div id="fr"></div>`;bindTabs();
 const run=async()=>{lastQ=$('fq').value.trim();const r=$('fr');if(lastQ.length<2){r.innerHTML='<p class="mute">Type at least 2 letters to search your collections and decks.</p>';return}
 const[{data:es},{data:cs}]=await Promise.all([sb.from('entries').select('*').ilike('name','%'+lastQ.replace(/[%_]/g,'')+'%'),sb.from('collections').select('id,name,kind,thumb_id')]);
@@ -228,8 +260,9 @@ const cgn=grp.startsWith('c:')?grp.slice(2):null;
 const tagSel=cgn?`<select class="sm" data-tg="${e.id}" aria-label="${esc(cgn)} tag for ${esc(e.name)}"><option value="">${esc(cgn)}: (none)</option>${((c.custom_groups||{})[cgn]||[]).map(t=>`<option value="${esc(t)}"${(e.tags||{})[cgn]==t?' selected':''}>${esc(t)}</option>`).join('')}<option value="__new">＋ New tag…</option></select>`:'';
 const bdSel=deck?`<select class="sm" data-bd="${e.id}" aria-label="Board for ${esc(e.name)}"><option value="main">Main Deck</option><option value="side"${e.board=='side'?' selected':''}>Sideboard</option></select>`:'';
 const ownSel=deck?`<select class="sm ${st=='need'?'down':st=='proxy'?'mute':''}" data-own="${e.id}" aria-label="Ownership for ${esc(e.name)}">${[['owned','Owned'],['proxy','Proxy'],['need','Need to Buy']].map(([v,l])=>`<option value="${v}"${st==v?' selected':''}>${l}</option>`).join('')}</select>`:'';
-const cmdBtn=deck&&F.cmdr&&e.board!='side'?`<button class="sm" data-cmd="${e.id}">${e.is_commander?'Unset commander':'Make commander'}</button>`:'';
-const x=`<div>${ownSel} ${bdSel} ${cmdBtn} ${tb} <button class="sm" data-sw="${e.id}">Change printing</button> ${tagSel}</div>`;
+const cmdBtn=deck&&F.oath&&e.board!='side'?`<button class="sm" data-cmd="${e.id}">${e.is_commander?'Unset commander':'Make commander'}</button>`:'';
+const swBtn=deck&&F.cmdr&&!F.oath&&e.is_commander&&e.board!='side'?`<button class="sm" data-swc="${e.id}">Swap Commander</button>`:'';
+const x=`<div>${ownSel} ${bdSel} ${cmdBtn}${swBtn} ${tb} <button class="sm" data-sw="${e.id}">Change printing</button> ${tagSel}</div>`;
 if(view=='grid')return`<div class="gc"><img class="gi" loading="lazy" alt="${esc(e.name)}" src="${big(e.scryfall_id)}"><div class="gp"><button class="pbtn" data-hist="${e.id}" aria-label="Price history for ${esc(e.name)}">${money(now)}</button> <span class="mute">${fmt(chg(h,7))||'new'} wk</span></div><div class="mute gn"><b>${esc(e.name)}</b><br>${esc(e.set_code).toUpperCase()} #${esc(e.collector)} · ${e.finish}${e.details?' · '+esc(e.details):''}</div>${x}${deck?'':decksFor(e.name)}<div class="gq"><button data-q="${e.id}:-1" aria-label="Remove one">−</button> ${e.qty} <button data-q="${e.id}:1" aria-label="Add one">+</button></div></div>`;
 return`<div class="row" data-sid="${e.scryfall_id}">${view=='text'?'':`<img class="th" loading="lazy" alt="" src="${pic(e.scryfall_id)}">`}<div class="grow"><b>${esc(e.name)}</b><div class="mute">${esc(e.set_code).toUpperCase()} #${esc(e.collector)} · ${e.finish}${e.details?' · '+esc(e.details):''}</div>${x}${deck?'':decksFor(e.name)}</div>
 ${view=='text'?'':spark(h.map(y=>y.usd))}<div class="num"><button class="pbtn" data-hist="${e.id}" aria-label="Price history for ${esc(e.name)}">${money(now)}</button><div class="mute">${fmt(chg(h,7))||'new'} wk · ${fmt(chg(h,28))||'–'} 4wk</div></div>
@@ -247,7 +280,7 @@ const gdd=dd('Group',GLc,grp,'data-g',gx),sdd=dd('Sort',SL,srt,'data-s');
 const fdd=deck?dd('Format',Object.entries(FMT).map(([k,v])=>[k,v.n]),c.format||'commander','data-f'):'';
 const erb=deck&&F.custom?'<div><button class="sm" id="er">Edit custom rules</button></div>':'';
 const sideSec=side.length?`<h3>Sideboard <span class="mute">(${side.reduce((n,e)=>n+e.qty,0)})</span></h3>${wrap(side)}`:'';
-const body=deck?`${F.cmdr?`<h3>${F.oath?'Oathbreaker &amp; signature spell':'Commander'}</h3>${wrap(cm)||'<p class="mute">Not chosen yet. Tap “Make commander” on a card below.</p>'}`:''}${cats}${sideSec}`:(es.length?(grp=='none'?wrap(es):gh(es)):'<p class="mute">Empty. Use “Add card” to search by name and pick a printing.</p>');
+const body=deck?`${F.cmdr?`<h3>${F.oath?'Oathbreaker &amp; signature spell':'Commander'}</h3>${wrap(cm)||(F.oath?'<p class="mute">Not chosen yet. Tap “Make commander” on a card below.</p>':'<p class="mute">No commander yet. <button class="sm" data-swc="">Choose Commander</button></p>')}`:''}${cats}${sideSec}`:(es.length?(grp=='none'?wrap(es):gh(es)):'<p class="mute">Empty. Use “Add card” to search by name and pick a printing.</p>');
 const n=es.reduce((a,e)=>a+e.qty,0);
 const vp=V?`<div class="vp" role="status"><div class="mute">${ruleText(F)}</div>${V.out.length?V.out.map(([l,t])=>`<div class="${l=='err'?'down':'warn'}">${l=='err'?'✖':'⚠'} ${t}</div>`).join(''):`<div class="up">✓ Legal for ${esc(F.n)}</div>`}</div>`:'';
 const okc=V?(V.out.some(z=>z[0]=='err')?'down':(F.max!=null?V.mn==F.max:F.min!=null?V.mn>=F.min:true)?'up':''):'';
@@ -255,6 +288,7 @@ const info=deck?`<div class="mute"><b class="${okc}">${V.mn}${F.max!=null?' / '+
 app.innerHTML=`<div class="top"><button id="bk">Back to ${deck?'decks':'collections'}</button><button class="p" id="ad">Add card</button></div><h2>${esc(c.name)}</h2><div class="total">${money(total)}</div>${info}${fdd}${dd('Display',[['list','List'],['grid','Grid'],['text','Text only']],view,'data-v')}${gdd}${sdd}${erb}${body}`;
 if(ret){const y=ret;ret=0;requestAnimationFrame(()=>scrollTo(0,y))}else scrollTo(0,0);
 app.querySelectorAll('[data-hist]').forEach(b=>b.onclick=()=>{const e=es.find(x=>x.id==b.dataset.hist);showHist(e,H[e.scryfall_id+e.finish]||[])});
+app.querySelectorAll('[data-swc]').forEach(b=>b.onclick=()=>cmdPicker(c,es,F,b.dataset.swc||null));
 app.querySelectorAll('[data-bd]').forEach(b=>b.onchange=async()=>{const e=es.find(z=>z.id==b.dataset.bd),u={board:b.value};if(b.value=='side')u.is_commander=false;await sb.from('entries').update(u).eq('id',e.id);reopen(c)});
 app.querySelectorAll('[data-tg]').forEach(b=>b.onchange=async()=>{const e=es.find(z=>z.id==b.dataset.tg),n=grp.slice(2);let v=b.value;
 if(v=='__new'){v=(prompt('New tag for the group "'+n+'":')||'').trim();if(!v){reopen(c);return}const cg={...(c.custom_groups||{})};if(!(cg[n]||[]).includes(v)){cg[n]=[...(cg[n]||[]),v];await sb.from('collections').update({custom_groups:cg}).eq('id',c.id);c.custom_groups=cg}}
