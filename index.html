@@ -33,6 +33,7 @@ h3{font:600 17px Georgia,serif;margin:18px 0 0}.sm{padding:3px 8px;font-size:12p
 .ddm button{display:block;width:100%;text-align:left;border:0;padding:8px 10px}.ddm button[aria-checked=true]{font-weight:700}
 .dg{display:inline-flex;align-items:center;gap:6px;margin:8px 16px 8px 0}.dg .dd{margin:0}.dl{font-weight:600}
 textarea{width:100%;padding:10px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);font:inherit;margin:4px 0}
+select.sm{padding:3px 6px;font:inherit;font-size:12px;margin-top:4px;color:inherit;background:var(--panel);border:1px solid var(--ink);border-radius:6px}
 </style></head><body><main id="app"></main><img id="pv" alt=""><button id="top" aria-label="Back to top" title="Back to top">↑</button>
 <script>
 const SB_URL='https://wihratryjsmcbpsistkj.supabase.co',SB_KEY='sb_publishable_6k9ibJeQe9iDIxYOCxgPPA_tJTjth8f';
@@ -63,6 +64,7 @@ const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&g
 const $=id=>document.getElementById(id),money=n=>n==null?'–':'$'+n.toFixed(2);
 const pic=id=>`https://cards.scryfall.io/small/front/${id[0]}/${id[1]}/${id}.jpg`;
 let srt='az';try{srt=localStorage.getItem('sort')||'az'}catch{}
+let ret=0;const reopen=c=>{ret=scrollY;return open(c)};
 let grp='type';try{grp=localStorage.getItem('group')||'type'}catch{}
 let cur=null,tab='collection',view=matchMedia('(max-width:699px)').matches?'grid':'list';try{view=localStorage.getItem('view')||view}catch{}
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
@@ -73,7 +75,7 @@ $('up').onclick=async()=>{const{data,error}=await sb.auth.signUp({email:$('em').
 const tabsHtml=()=>`<div class="top"><h1>Card Ledger</h1><button id="out">Sign out</button></div><div class="tabs"><button data-t="collection" class="${tab=='collection'?'on':''}">Collections</button><button data-t="deck" class="${tab=='deck'?'on':''}">Decks</button><button data-t="search" class="${tab=='search'?'on':''}">Find a card</button></div>`;
 function bindTabs(){app.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{tab=b.dataset.t;home()});$('out').onclick=async()=>{await sb.auth.signOut();auth()}}
 let lastQ='';
-async function home(){cur=null;if(tab=='search')return finder();const deck=tab=='deck',nm=deck?'deck':'collection';
+async function home(){cur=null;ret=0;if(tab=='search')return finder();const deck=tab=='deck',nm=deck?'deck':'collection';
 const{data}=await sb.from('collections').select('*').eq('kind',tab).order('created_at');
 const rows=(data||[]).map(c=>`<div class="row">${c.thumb_id?`<img class="th" data-id="${c.id}" style="cursor:pointer" loading="lazy" alt="" src="${pic(c.thumb_id)}">`:'<div class="th"></div>'}<button class="link grow" data-id="${c.id}">${esc(c.name)}</button><button data-del="${c.id}" aria-label="Delete ${esc(c.name)}">Delete</button></div>`).join('')||`<p class="mute">No ${nm}s yet. Name your first one below.</p>`;
 app.innerHTML=`${tabsHtml()}${rows}<p><input id="nm" placeholder="${deck?'New deck, e.g. Atraxa EDH':'New collection, e.g. Trade binder'}"><button class="p" id="mk">Create ${nm}</button>${deck?' <button id="imp">Import a deck</button>':''}</p>`;
@@ -103,7 +105,7 @@ const nm=$('in').value.trim()||j.name||'Imported deck';
 const c1=await sb.from('collections').insert({name:nm,kind:'deck'}).select().single();if(c1.error)throw c1.error;col=c1.data;
 const own=$('io').checked,m={};
 j.cards.forEach(x=>{const k=x.c.id+'|'+x.finish+'|'+(x.board=='commander');if(m[k])m[k].q+=x.qty;else m[k]={x,q:x.qty}});
-const L=Object.values(m),rows=L.map(({x,q})=>({collection_id:col.id,scryfall_id:x.c.id,finish:x.finish,qty:q,name:x.c.name,type_line:x.c.type_line,colors:x.c.colors,cmc:x.c.cmc,rarity:x.c.rarity,set_name:x.c.set_name,artist:x.c.artist,set_code:x.c.set,collector:x.c.collector_number,details:x.c.details,owned:own,is_commander:x.board=='commander'}));
+const L=Object.values(m),rows=L.map(({x,q})=>({collection_id:col.id,scryfall_id:x.c.id,finish:x.finish,qty:q,name:x.c.name,type_line:x.c.type_line,colors:x.c.colors,cmc:x.c.cmc,rarity:x.c.rarity,set_name:x.c.set_name,artist:x.c.artist,set_code:x.c.set,collector:x.c.collector_number,details:x.c.details,ownership:own?'owned':'need',is_commander:x.board=='commander'}));
 for(let i=0;i<rows.length;i+=100){const e=await sb.from('entries').insert(rows.slice(i,i+100));if(e.error)throw e.error}
 const day=new Date().toLocaleDateString('en-CA',{timeZone:'America/New_York'}),pm={};
 L.forEach(({x})=>{if(x.c.price)pm[x.c.id+x.finish]={scryfall_id:x.c.id,finish:x.finish,snap_date:day,usd:x.c.price}});
@@ -114,7 +116,7 @@ r.innerHTML=`<p class="up"><b>Imported ${n} cards</b> (${rows.length} different)
 $('op').onclick=()=>open(col)
 }catch(e){if(col)await sb.from('collections').delete().eq('id',col.id);r.innerHTML=`<p class="down">${esc(e.message||e)}</p>`;$('go').disabled=false}}
 const fieldsOf=c=>({name:c.name,type_line:c.type_line||c.card_faces?.[0]?.type_line||null,colors:(c.colors||c.card_faces?.[0]?.colors||[]).join(','),cmc:c.cmc,rarity:c.rarity,set_name:c.set_name,artist:c.artist||c.card_faces?.[0]?.artist||null,set_code:c.set,collector:c.collector_number,details:[c.full_art&&'full art',c.border_color=='borderless'&&'borderless',c.promo&&'promo'].filter(Boolean).join(', ')});
-async function swapScreen(e,c){app.innerHTML=`<div class="top"><button id="bk">Back to ${esc(c.name)}</button></div><h2>Change printing</h2><div class="mute"><b>${esc(e.name)}</b> · now ${esc(e.set_code).toUpperCase()} #${esc(e.collector)} · ${e.finish}. Pick the printing to use instead. Quantity, owned and commander settings stay as they are.</div><div id="res"><p class="mute">Loading printings…</p></div>`;
+async function swapScreen(e,c){scrollTo(0,0);app.innerHTML=`<div class="top"><button id="bk">Back to ${esc(c.name)}</button></div><h2>Change printing</h2><div class="mute"><b>${esc(e.name)}</b> · now ${esc(e.set_code).toUpperCase()} #${esc(e.collector)} · ${e.finish}. Pick the printing to use instead. Quantity, owned and commander settings stay as they are.</div><div id="res"><p class="mute">Loading printings…</p></div>`;
 $('bk').onclick=()=>open(c);
 let url=`https://api.scryfall.com/cards/search?unique=prints&order=released&include_extras=true&q=${encodeURIComponent('!"'+e.name+'"')}`;const cards=[];
 for(let i=0;url&&i<5;i++){const r=await fetch(url);if(!r.ok)break;const j=await r.json();cards.push(...j.data);url=j.has_more?j.next_page:null}
@@ -131,12 +133,12 @@ else await sb.from('entries').update({scryfall_id:k.id,finish:f,...fieldsOf(k)})
 const p=+k.prices[COL[f]];if(p)await sb.from('prices').upsert({scryfall_id:k.id,finish:f,snap_date:new Date().toLocaleDateString('en-CA',{timeZone:'America/New_York'}),usd:p},{ignoreDuplicates:true,onConflict:'scryfall_id,finish,snap_date'});
 if(c.thumb_id==e.scryfall_id){await sb.from('collections').update({thumb_id:k.id}).eq('id',c.id);c.thumb_id=k.id}
 open(c)}
-function finder(){app.innerHTML=`${tabsHtml()}<input id="fq" autocomplete="off" placeholder="Type a card name, e.g. Sol Ring" value="${esc(lastQ)}"><div id="fr"></div>`;bindTabs();
+function finder(){ret=0;app.innerHTML=`${tabsHtml()}<input id="fq" autocomplete="off" placeholder="Type a card name, e.g. Sol Ring" value="${esc(lastQ)}"><div id="fr"></div>`;bindTabs();
 const run=async()=>{lastQ=$('fq').value.trim();const r=$('fr');if(lastQ.length<2){r.innerHTML='<p class="mute">Type at least 2 letters to search your collections and decks.</p>';return}
 const[{data:es},{data:cs}]=await Promise.all([sb.from('entries').select('*').ilike('name','%'+lastQ.replace(/[%_]/g,'')+'%'),sb.from('collections').select('id,name,kind,thumb_id')]);
 const cn=Object.fromEntries((cs||[]).map(c=>[c.id,c])),g={};(es||[]).forEach(e=>(g[e.name]??=[]).push(e));
 const names=Object.keys(g).sort();
-r.innerHTML=names.length?names.map(n=>{const L=g[n];return`<div class="row" data-sid="${L[0].scryfall_id}" style="align-items:flex-start"><img class="th" loading="lazy" alt="" src="${pic(L[0].scryfall_id)}"><div class="grow"><b>${esc(n)}</b> <span class="mute">· ${L.reduce((a,e)=>a+e.qty,0)} total in ${L.length} place${L.length>1?'s':''}</span>${L.map(e=>{const c=cn[e.collection_id]||{},dk=c.kind=='deck';return`<div><button class="link" data-go="${e.collection_id}">${esc(c.name)}</button> <span class="mute">${dk?'Deck':'Collection'} · ${esc(e.set_code).toUpperCase()} #${esc(e.collector)} · ${e.finish} · ×${e.qty}${dk&&e.owned===false?' · need to buy':''}${e.is_commander?' · commander':''}</span></div>`}).join('')}</div></div>`}).join(''):`<p class="mute">No card matching “${esc(lastQ)}” in your collections or decks.</p>`;
+r.innerHTML=names.length?names.map(n=>{const L=g[n];return`<div class="row" data-sid="${L[0].scryfall_id}" style="align-items:flex-start"><img class="th" loading="lazy" alt="" src="${pic(L[0].scryfall_id)}"><div class="grow"><b>${esc(n)}</b> <span class="mute">· ${L.reduce((a,e)=>a+e.qty,0)} total in ${L.length} place${L.length>1?'s':''}</span>${L.map(e=>{const c=cn[e.collection_id]||{},dk=c.kind=='deck';return`<div><button class="link" data-go="${e.collection_id}">${esc(c.name)}</button> <span class="mute">${dk?'Deck':'Collection'} · ${esc(e.set_code).toUpperCase()} #${esc(e.collector)} · ${e.finish} · ×${e.qty}${dk&&e.ownership=='need'?' · need to buy':dk&&e.ownership=='proxy'?' · proxy':''}${e.is_commander?' · commander':''}</span></div>`}).join('')}</div></div>`}).join(''):`<p class="mute">No card matching “${esc(lastQ)}” in your collections or decks.</p>`;
 r.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>open(cn[b.dataset.go]))};
 let t;$('fq').oninput=()=>{clearTimeout(t);t=setTimeout(run,250)};$('fq').onkeydown=e=>{if(e.key=='Enter')run()};if(lastQ)run();$('fq').focus()}
 function spark(v){if(v.length<2)return'<svg class="sp"></svg>';const lo=Math.min(...v),hi=Math.max(...v),r=hi-lo||1;
@@ -153,10 +155,10 @@ const inD={};if(!deck&&es.length){const{data:dk}=await sb.from('collections').se
 if(dk?.length){const dn=Object.fromEntries(dk.map(d=>[d.id,d.name])),{data:de}=await sb.from('entries').select('name,collection_id').in('collection_id',dk.map(d=>d.id)).in('name',[...new Set(es.map(e=>e.name))]);
 (de||[]).forEach(x=>{(inD[x.name]??=new Set()).add(dn[x.collection_id])})}}
 const decksFor=n=>`<div class="mute">${inD[n]?'In decks: '+[...inD[n]].map(d=>esc(d)).join(', '):'Not in any deck'}</div>`;
-let total=0,need=0,needN=0;
-const row=e=>{const h=H[e.scryfall_id+e.finish]||[],now=h.at(-1)?.usd,buy=deck&&e.owned===false;if(now){total+=now*e.qty;if(buy)need+=now*e.qty}if(buy)needN+=e.qty;
+let total=0,need=0,needN=0,proxyN=0;
+const row=e=>{const h=H[e.scryfall_id+e.finish]||[],now=h.at(-1)?.usd,st=e.ownership||'owned',buy=deck&&st=='need';if(deck&&st=='proxy')proxyN+=e.qty;if(now){total+=now*e.qty;if(buy)need+=now*e.qty}if(buy)needN+=e.qty;
 const tb=`<button class="sm" data-th="${e.id}">${c.thumb_id==e.scryfall_id?'Unset thumbnail':'Set as thumbnail'}</button>`;
-const x=`<div>${deck?`<button class="sm ${buy?'down':''}" data-own="${e.id}">${buy?'Need to buy':'Owned'}</button> <button class="sm" data-cmd="${e.id}">${e.is_commander?'Unset commander':'Make commander'}</button> `:''}${tb} <button class="sm" data-sw="${e.id}">Change printing</button></div>`;
+const x=`<div>${deck?`<select class="sm ${st=='need'?'down':st=='proxy'?'mute':''}" data-own="${e.id}" aria-label="Ownership for ${esc(e.name)}">${[['owned','Owned'],['proxy','Proxy'],['need','Need to Buy']].map(([v,l])=>`<option value="${v}"${st==v?' selected':''}>${l}</option>`).join('')}</select> <button class="sm" data-cmd="${e.id}">${e.is_commander?'Unset commander':'Make commander'}</button> `:''}${tb} <button class="sm" data-sw="${e.id}">Change printing</button></div>`;
 if(view=='grid')return`<div class="gc"><img class="gi" loading="lazy" alt="${esc(e.name)}" src="${big(e.scryfall_id)}"><div class="gp"><button class="pbtn" data-hist="${e.id}" aria-label="Price history for ${esc(e.name)}">${money(now)}</button> <span class="mute">${fmt(chg(h,7))||'new'} wk</span></div><div class="mute gn"><b>${esc(e.name)}</b><br>${esc(e.set_code).toUpperCase()} #${esc(e.collector)} · ${e.finish}${e.details?' · '+esc(e.details):''}</div>${x}${deck?'':decksFor(e.name)}<div class="gq"><button data-q="${e.id}:-1" aria-label="Remove one">−</button> ${e.qty} <button data-q="${e.id}:1" aria-label="Add one">+</button></div></div>`;
 return`<div class="row" data-sid="${e.scryfall_id}">${view=='text'?'':`<img class="th" loading="lazy" alt="" src="${pic(e.scryfall_id)}">`}<div class="grow"><b>${esc(e.name)}</b><div class="mute">${esc(e.set_code).toUpperCase()} #${esc(e.collector)} · ${e.finish}${e.details?' · '+esc(e.details):''}</div>${x}${deck?'':decksFor(e.name)}</div>
 ${view=='text'?'':spark(h.map(y=>y.usd))}<div class="num"><button class="pbtn" data-hist="${e.id}" aria-label="Price history for ${esc(e.name)}">${money(now)}</button><div class="mute">${fmt(chg(h,7))||'new'} wk · ${fmt(chg(h,28))||'–'} 4wk</div></div>
@@ -171,20 +173,21 @@ const cats=!rest.length?'<p class="mute">No other cards yet.</p>':grp=='none'?`<
 const gdd=dd('Group',GL,grp,'data-g'),sdd=dd('Sort',SL,srt,'data-s');
 const body=deck?`<h3>Commander</h3>${wrap(cm)||'<p class="mute">No commander yet. Tap “Make commander” on a card below.</p>'}${cats}`:(es.length?(grp=='none'?wrap(es):gh(es)):'<p class="mute">Empty. Use “Add card” to search by name and pick a printing.</p>');
 const n=es.reduce((a,e)=>a+e.qty,0);
-const info=deck?`<div class="mute"><b class="${n==100?'up':n>100?'down':''}">${n} / 100 cards</b> · ${n<100?(100-n)+' to go':n>100?(n-100)+' over':'deck is full'}</div><div class="mute">${needN?`Still need ${needN} card${needN>1?'s':''} · ${money(need)} to buy`:'You own every card in this deck'}</div>`:`<div class="mute">${n} cards, latest prices</div>`;
+const info=deck?`<div class="mute"><b class="${n==100?'up':n>100?'down':''}">${n} / 100 cards</b> · ${n<100?(100-n)+' to go':n>100?(n-100)+' over':'deck is full'}</div><div class="mute">${needN?`Still need ${needN} card${needN>1?'s':''} · ${money(need)} to buy`:'You have every card in this deck'}${proxyN?` · ${proxyN} proxy card${proxyN>1?'s':''}`:''}</div>`:`<div class="mute">${n} cards, latest prices</div>`;
 app.innerHTML=`<div class="top"><button id="bk">Back to ${deck?'decks':'collections'}</button><button class="p" id="ad">Add card</button></div><h2>${esc(c.name)}</h2><div class="total">${money(total)}</div>${info}${dd('Display',[['list','List'],['grid','Grid'],['text','Text only']],view,'data-v')}${gdd}${sdd}${body}`;
+if(ret){const y=ret;ret=0;requestAnimationFrame(()=>scrollTo(0,y))}else scrollTo(0,0);
 app.querySelectorAll('[data-hist]').forEach(b=>b.onclick=()=>{const e=es.find(x=>x.id==b.dataset.hist);showHist(e,H[e.scryfall_id+e.finish]||[])});
 app.querySelectorAll('[data-v]').forEach(b=>b.onclick=()=>{view=b.dataset.v;try{localStorage.setItem('view',view)}catch{}open(c)});
-app.querySelectorAll('[data-sw]').forEach(b=>b.onclick=()=>swapScreen(es.find(x=>x.id==b.dataset.sw),c));
-app.querySelectorAll('[data-th]').forEach(b=>b.onclick=async()=>{const e=es.find(x=>x.id==b.dataset.th),id=c.thumb_id==e.scryfall_id?null:e.scryfall_id;await sb.from('collections').update({thumb_id:id}).eq('id',c.id);c.thumb_id=id;open(c)});
+app.querySelectorAll('[data-sw]').forEach(b=>b.onclick=()=>{ret=scrollY;swapScreen(es.find(x=>x.id==b.dataset.sw),c)});
+app.querySelectorAll('[data-th]').forEach(b=>b.onclick=async()=>{const e=es.find(x=>x.id==b.dataset.th),id=c.thumb_id==e.scryfall_id?null:e.scryfall_id;await sb.from('collections').update({thumb_id:id}).eq('id',c.id);c.thumb_id=id;reopen(c)});
 app.querySelectorAll('.dd>button').forEach(b=>b.onclick=()=>{const m=b.nextElementSibling;closeMenus(m);m.hidden=!m.hidden;if(!m.hidden){m.style.left='0';m.style.right='auto';if(m.getBoundingClientRect().right>innerWidth-8){m.style.left='auto';m.style.right='0'}}b.setAttribute('aria-expanded',String(!m.hidden))});
 app.querySelectorAll('[data-s]').forEach(b=>b.onclick=()=>{srt=b.dataset.s;try{localStorage.setItem('sort',srt)}catch{}open(c)});
 app.querySelectorAll('[data-g]').forEach(b=>b.onclick=()=>{grp=b.dataset.g;try{localStorage.setItem(deck?'group':'group_c',grp)}catch{}open(c)});
-$('bk').onclick=home;$('ad').onclick=search;
+$('bk').onclick=home;$('ad').onclick=()=>{ret=scrollY;search()};
 app.querySelectorAll('[data-q]').forEach(b=>b.onclick=async()=>{const[id,d]=b.dataset.q.split(':'),e=es.find(x=>x.id==id),q=e.qty+ +d;
-q<1?await sb.from('entries').delete().eq('id',id):await sb.from('entries').update({qty:q}).eq('id',id);open(c)});
-app.querySelectorAll('[data-own]').forEach(b=>b.onclick=async()=>{const e=es.find(x=>x.id==b.dataset.own);await sb.from('entries').update({owned:e.owned===false}).eq('id',e.id);open(c)});
-app.querySelectorAll('[data-cmd]').forEach(b=>b.onclick=async()=>{const e=es.find(x=>x.id==b.dataset.cmd);await sb.from('entries').update({is_commander:!e.is_commander}).eq('id',e.id);open(c)})}
+q<1?await sb.from('entries').delete().eq('id',id):await sb.from('entries').update({qty:q}).eq('id',id);reopen(c)});
+app.querySelectorAll('[data-own]').forEach(b=>b.onchange=async()=>{await sb.from('entries').update({ownership:b.value}).eq('id',b.dataset.own);reopen(c)});
+app.querySelectorAll('[data-cmd]').forEach(b=>b.onclick=async()=>{const e=es.find(x=>x.id==b.dataset.cmd);await sb.from('entries').update({is_commander:!e.is_commander}).eq('id',e.id);reopen(c)})}
 function showHist(e,h){document.getElementById('hm')?.remove();
 const rev=[...h].reverse(),rows=rev.map((x,i)=>{const p=rev[i+1],d=p?x.usd-p.usd:null;return`<tr><td>${esc(x.d)}</td><td class="num">${money(x.usd)}</td><td class="num ${d>0?'up':d<0?'down':''}">${!d?'–':(d>0?'+':'−')+'$'+Math.abs(d).toFixed(2)}</td></tr>`}).join('');
 const m=document.createElement('div');m.id='hm';
@@ -193,7 +196,7 @@ document.body.appendChild(m);
 const close=()=>{m.remove();document.removeEventListener('keydown',onKey)},onKey=ev=>{if(ev.key=='Escape')close()};
 document.addEventListener('keydown',onKey);m.onclick=ev=>{if(ev.target==m)close()};$('hx').onclick=close;$('hx').focus();
 $('hcsv').onclick=()=>{const csv='Date,Price (USD)\n'+h.map(x=>x.d+','+x.usd.toFixed(2)).join('\n'),a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download=(e.name+' '+e.set_code+' '+e.finish+' prices.csv').replace(/[^\w. -]/g,'');a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}}
-function search(){app.innerHTML=`<div class="top"><button id="bk">Back to ${esc(cur.name)}</button></div><h2>Add a card</h2>${cur.kind=='deck'?'<label><input type="checkbox" id="own" checked style="width:auto;margin:0 6px 0 0">I own these cards</label>':''}<input id="q" autocomplete="off" placeholder="Exact card name, e.g. Sol Ring"><button class="p" id="go">Find printings</button><div id="res"></div>`;
+function search(){scrollTo(0,0);app.innerHTML=`<div class="top"><button id="bk">Back to ${esc(cur.name)}</button></div><h2>Add a card</h2>${cur.kind=='deck'?'<label><input type="checkbox" id="own" checked style="width:auto;margin:0 6px 0 0">I own these cards</label>':''}<input id="q" autocomplete="off" placeholder="Exact card name, e.g. Sol Ring"><button class="p" id="go">Find printings</button><div id="res"></div>`;
 $('bk').onclick=()=>open(cur);$('go').onclick=find;$('q').onkeydown=e=>{if(e.key=='Enter')find()}}
 async function find(){const n=$('q').value.trim(),res=$('res');if(!n)return;res.innerHTML='<p class="mute">Searching…</p>';
 const url=q=>`https://api.scryfall.com/cards/search?unique=prints&order=released&include_extras=true&q=${encodeURIComponent(q)}`;
@@ -207,7 +210,7 @@ res.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>add(b))}
 async function add(b){const[i,f]=b.dataset.a.split(':'),c=window._c[i];b.disabled=true;
 const{data:ex}=await sb.from('entries').select('id,qty').eq('collection_id',cur.id).eq('scryfall_id',c.id).eq('finish',f);
 if(ex?.length)await sb.from('entries').update({qty:ex[0].qty+1}).eq('id',ex[0].id);
-else await sb.from('entries').insert({collection_id:cur.id,scryfall_id:c.id,finish:f,owned:$('own')?$('own').checked:true,name:c.name,type_line:c.type_line||c.card_faces?.[0]?.type_line||null,colors:(c.colors||c.card_faces?.[0]?.colors||[]).join(','),cmc:c.cmc,rarity:c.rarity,set_name:c.set_name,artist:c.artist||c.card_faces?.[0]?.artist||null,set_code:c.set,collector:c.collector_number,
+else await sb.from('entries').insert({collection_id:cur.id,scryfall_id:c.id,finish:f,ownership:$('own')&&!$('own').checked?'need':'owned',name:c.name,type_line:c.type_line||c.card_faces?.[0]?.type_line||null,colors:(c.colors||c.card_faces?.[0]?.colors||[]).join(','),cmc:c.cmc,rarity:c.rarity,set_name:c.set_name,artist:c.artist||c.card_faces?.[0]?.artist||null,set_code:c.set,collector:c.collector_number,
 details:[c.full_art&&'full art',c.border_color=='borderless'&&'borderless',c.promo&&'promo'].filter(Boolean).join(', ')});
 const p=+c.prices[COL[f]];if(p)await sb.from('prices').upsert({scryfall_id:c.id,finish:f,snap_date:new Date().toLocaleDateString('en-CA',{timeZone:'America/New_York'}),usd:p},{ignoreDuplicates:true});
 b.textContent='Added ✓'}
