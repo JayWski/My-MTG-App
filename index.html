@@ -2,8 +2,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1"><link rel="manifest" href="manifest.json"><meta name="theme-color" content="#14202b">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <style>
-:root{--bg:#eef1f4;--panel:#fff;--ink:#14202b;--mute:#5b6b78;--line:#d5dce2;--up:#1f8a5b;--down:#c2402f;--acc:#14202b}
-@media(prefers-color-scheme:dark){:root{--bg:#0e171e;--panel:#17242e;--ink:#e9e5da;--mute:#8fa0ad;--line:#27384580;--up:#4cc58d;--down:#ef7a69;--acc:#e9e5da}}
+:root{--bg:#eef1f4;--panel:#fff;--ink:#14202b;--mute:#5b6b78;--line:#d5dce2;--up:#1f8a5b;--down:#c2402f;--warn:#9a6700;--acc:#14202b}
+@media(prefers-color-scheme:dark){:root{--bg:#0e171e;--panel:#17242e;--ink:#e9e5da;--mute:#8fa0ad;--line:#27384580;--up:#4cc58d;--down:#ef7a69;--warn:#e3b341;--acc:#e9e5da}}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,sans-serif}
 main{max-width:760px;margin:0 auto;padding:16px}h1,h2{font-family:Georgia,serif;font-weight:600;margin:.2em 0}
 button,input{font:inherit;color:inherit}input{width:100%;padding:10px;border:1px solid var(--line);border-radius:6px;background:var(--panel);margin:4px 0}
@@ -34,6 +34,8 @@ h3{font:600 17px Georgia,serif;margin:18px 0 0}.sm{padding:3px 8px;font-size:12p
 .dg{display:inline-flex;align-items:center;gap:6px;margin:8px 16px 8px 0}.dg .dd{margin:0}.dl{font-weight:600}
 textarea{width:100%;padding:10px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);font:inherit;margin:4px 0}
 select.sm{padding:3px 6px;font:inherit;font-size:12px;margin-top:4px;color:inherit;background:var(--panel);border:1px solid var(--ink);border-radius:6px}
+.warn{color:var(--warn)}.vp{margin:8px 0;padding:8px 10px;border:1px solid var(--line);border-radius:8px}.vp div{margin:3px 0}
+select.fs{padding:10px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:inherit;font:inherit;width:100%;margin:4px 0}.rl{display:block;margin:8px 0}
 </style></head><body><main id="app"></main><img id="pv" alt=""><button id="top" aria-label="Back to top" title="Back to top">↑</button>
 <script>
 const SB_URL='https://wihratryjsmcbpsistkj.supabase.co',SB_KEY='sb_publishable_6k9ibJeQe9iDIxYOCxgPPA_tJTjth8f';
@@ -45,7 +47,56 @@ const catOf=e=>{const t=(e.type_line||'').split(' // ')[0].split('—')[0].trim(
 const COLN={W:'White',U:'Blue',B:'Black',R:'Red',G:'Green'},COLO=['White','Blue','Black','Red','Green','Multicolor','Colorless'],RAR=['Common','Uncommon','Rare','Mythic','Special','Bonus'];
 const GL=[['none','None'],['type','Type'],['subtype','Subtype'],['color','Color'],['mv','Mana Value'],['rarity','Rarity'],['set','Set'],['artist','Artist']];
 const SL=[['mv','Mana Value'],['az','Alphabetical'],['rarity','Rarity'],['color','Color']];
-const dd=(lab,items,cur,attr)=>{const nm=esc((items.find(i=>i[0]==cur)||['',''])[1]);return`<span class="dg"><span class="dl">${lab}:</span><div class="dd"><button aria-haspopup="true" aria-expanded="false" aria-label="${lab}: ${nm}">${nm} ▾</button><div class="ddm" role="menu" hidden>${items.map(([v,l])=>`<button role="menuitemradio" aria-checked="${cur==v}" ${attr}="${v}">${cur==v?'✓ ':''}${l}</button>`).join('')}</div></div></span>`};
+const FMT={
+commander:{n:'Commander / EDH',key:'commander',min:100,max:100,side:null,copies:1,cmdr:[1,2],ci:1},
+standard:{n:'Standard',key:'standard',min:60,max:null,side:15,copies:4},
+modern:{n:'Modern',key:'modern',min:60,max:null,side:15,copies:4},
+legacy:{n:'Legacy',key:'legacy',min:60,max:null,side:15,copies:4},
+pauper:{n:'Pauper',key:'pauper',min:60,max:null,side:15,copies:4},
+premodern:{n:'Premodern',key:'premodern',min:60,max:null,side:15,copies:4},
+vintage:{n:'Vintage',key:'vintage',min:60,max:null,side:15,copies:4,restr:1},
+duel:{n:'Duel Commander',key:'duel',min:100,max:100,side:null,copies:1,cmdr:[1,2],ci:1},
+oath:{n:'Oathbreaker',key:'oathbreaker',min:60,max:60,side:null,copies:1,cmdr:[2,2],ci:1,oath:1},
+canlander:{n:'Canadian Highlander',key:'vintage',min:100,max:null,side:null,copies:1,note:'Uses the Vintage card pool. The 10-point limit is not checked.'},
+custom:{n:'Custom',key:null,custom:1},
+brawl:{n:'Brawl',key:'brawl',min:100,max:100,side:null,copies:1,cmdr:[1,1],ci:1},
+sbrawl:{n:'Standard Brawl',key:'standardbrawl',min:60,max:60,side:null,copies:1,cmdr:[1,1],ci:1}};
+const ANY=new Set(["Dragon's Approach","Hare Apparent","Persistent Petitioners","Rat Colony","Relentless Rats","Shadowborn Apostle","Slime Against Humanity","Templar Knight","Tempest Hawk","Cid, Timeless Artificer"]);
+const LIM={"Seven Dwarves":7,"Nazgûl":9};
+const fmtOf=c=>{const F={...(FMT[c.format]||FMT.commander)};if(F.custom){const o=c.format_opts||{min:60,max:null,copies:4,side:15};F.min=o.min??null;F.max=o.max??null;F.copies=o.copies??null;F.side=o.side??null}return F};
+const ruleText=F=>{const p=[];p.push(F.min!=null&&F.max!=null&&F.min==F.max?`${F.min} cards`:F.min!=null?`${F.min}+ cards${F.max!=null?`, up to ${F.max}`:''}`:F.max!=null?`up to ${F.max} cards`:'any size');
+p.push(F.copies==1?'singleton':F.copies?`up to ${F.copies} copies of a card`:'any number of copies');
+if(F.side!=null)p.push(`${F.side}-card sideboard`);
+if(F.cmdr)p.push(F.cmdr[0]==F.cmdr[1]?(F.cmdr[0]==2?'Oathbreaker + signature spell':'1 commander'):'1-2 commanders');
+if(F.ci)p.push('color identity');
+return `${esc(F.n)}: ${p.join(', ')}.${F.note?' '+esc(F.note):''}`};
+function validate(c,es){const F=fmtOf(c),out=[],q=a=>a.reduce((n,e)=>n+e.qty,0);
+const main=es.filter(e=>e.board!='side'),side=es.filter(e=>e.board=='side'),mn=q(main),sn=q(side);
+if(F.max!=null&&mn>F.max)out.push(['err',`<b>Too many cards:</b> ${mn} / ${F.max} in the main deck (${mn-F.max} over).`]);
+else if(F.min!=null&&mn<F.min)out.push(['warn',`${F.min-mn} more card${F.min-mn>1?'s':''} needed: ${mn} / ${F.min} in the main deck.`]);
+if(F.side!=null&&sn>F.side)out.push(['err',`<b>Sideboard too big:</b> ${sn} cards, limit ${F.side} (${sn-F.side} over).`]);
+const nm=a=>[...new Set(a)].map(esc).join(', ');
+if(F.key){const bad={banned:[],not_legal:[],restricted:[]};let unk=0;
+es.forEach(e=>{if(!e.legalities){unk++;return}const st=e.legalities[F.key];if(st=='banned')bad.banned.push(e.name);else if(st=='not_legal')bad.not_legal.push(e.name);else if(st=='restricted'&&F.restr)bad.restricted.push(e.name)});
+if(bad.banned.length)out.push(['err',`<b>Banned in ${esc(F.n)}:</b> ${nm(bad.banned)}`]);
+if(bad.restricted.length)out.push(['warn',`<b>Restricted in ${esc(F.n)}</b> (only 1 copy allowed): ${nm(bad.restricted)}`]);
+if(bad.not_legal.length)out.push(['err',`<b>Not legal in ${esc(F.n)}:</b> ${nm(bad.not_legal)}`]);
+if(unk)out.push(['warn',`${unk} card${unk>1?'s have':' has'} no legality data yet. It fills in overnight.`])}
+const by={},basic=new Set();es.forEach(e=>{by[e.name]=(by[e.name]||0)+e.qty;if((e.type_line||'').includes('Basic'))basic.add(e.name)});
+const over=[];for(const[n,k]of Object.entries(by)){if(basic.has(n)||ANY.has(n))continue;
+const rs=F.restr&&F.key&&es.some(e=>e.name==n&&e.legalities?.[F.key]=='restricted');
+const lim=LIM[n]??(rs?1:F.copies);if(lim!=null&&k>lim)over.push(`${esc(n)} ×${k} (max ${lim})`)}
+if(over.length)out.push(['err',`<b>Too many copies:</b> ${over.join(', ')}`]);
+if(F.cmdr){const cm=main.filter(e=>e.is_commander),k=q(cm);
+if(k<F.cmdr[0])out.push(['warn',F.oath?'Choose your Oathbreaker (a planeswalker) and signature spell (an instant or sorcery) with Make commander.':'Choose your commander: tap Make commander on a card.']);
+else if(k>F.cmdr[1])out.push(['err',`<b>Too many commanders:</b> ${k} (max ${F.cmdr[1]}).`]);
+if(F.oath&&cm.length){const pw=cm.some(e=>(e.type_line||'').includes('Planeswalker')),sp=cm.some(e=>/Instant|Sorcery/.test(e.type_line||''));if(!pw||!sp)out.push(['err','<b>Oathbreaker needs</b> one planeswalker and one signature spell (instant or sorcery).'])}
+const src=F.oath?cm.filter(e=>(e.type_line||'').includes('Planeswalker')):cm;
+if(F.ci&&src.length){const id=new Set(src.flatMap(e=>(e.color_identity||'').split('')));
+const bad=es.filter(e=>e.color_identity!=null&&e.color_identity.split('').some(l=>l&&!id.has(l)));
+if(bad.length)out.push(['err',`<b>Outside your commander's color identity:</b> ${nm(bad.map(e=>e.name))}`])}}
+return{out,mn,sn,F}}
+const dd=(lab,items,cur,attr,extra='')=>{const nm=esc((items.find(i=>i[0]==cur)||['',''])[1]);return`<span class="dg"><span class="dl">${lab}:</span><div class="dd"><button aria-haspopup="true" aria-expanded="false" aria-label="${lab}: ${nm}">${nm} ▾</button><div class="ddm" role="menu" hidden>${items.map(([v,l])=>`<button role="menuitemradio" aria-checked="${cur==v}" ${attr}="${v}">${cur==v?'✓ ':''}${l}</button>`).join('')}${extra}</div></div></span>`};
 const rarR=e=>{const i=['common','uncommon','rare','mythic','special','bonus'].indexOf(e.rarity);return i<0?99:i};
 const colR=e=>{const c=(e.colors||'').split(',').filter(Boolean);return c.length>1?5:c.length?'WUBRG'.indexOf(c[0]):6};
 const byName=(a,b)=>a.name.localeCompare(b.name);
@@ -57,8 +108,9 @@ case'color':{const c=(e.colors||'').split(',').filter(Boolean);return c.length>1
 case'mv':return e.cmc==null?'Unknown':'Mana value '+Number(e.cmc);
 case'rarity':{const r=e.rarity||'unknown';return r[0].toUpperCase()+r.slice(1)}
 case'set':return e.set_name||(e.set_code||'').toUpperCase()||'Unknown';
-case'artist':return e.artist||'Unknown artist'}};
-const sortOf=(e,k)=>grp=='type'?DISP.indexOf(catOf(e)):grp=='color'?COLO.indexOf(k):grp=='mv'?(e.cmc==null?1e9:Number(e.cmc)):grp=='rarity'?(RAR.indexOf(k)<0?99:RAR.indexOf(k)):(['No subtype','Unknown','Unknown artist'].includes(k)?'zzzz':'')+k;
+case'artist':return e.artist||'Unknown artist';default:return(e.tags&&e.tags[grp.slice(2)])||'Untagged'}};
+const ctOrd=k=>{if(k=='Untagged')return 9999;const i=(window._ct||[]).indexOf(k);return i<0?5000:i};
+const sortOf=(e,k)=>grp.startsWith('c:')?ctOrd(k):grp=='type'?DISP.indexOf(catOf(e)):grp=='color'?COLO.indexOf(k):grp=='mv'?(e.cmc==null?1e9:Number(e.cmc)):grp=='rarity'?(RAR.indexOf(k)<0?99:RAR.indexOf(k)):(['No subtype','Unknown','Unknown artist'].includes(k)?'zzzz':'')+k;
 const plural=k=>({Sorcery:'Sorceries',Conspiracy:'Conspiracies',Kindred:'Kindred',Other:'Other'}[k]||k+'s');
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const $=id=>document.getElementById(id),money=n=>n==null?'–':'$'+n.toFixed(2);
@@ -78,17 +130,18 @@ let lastQ='';
 async function home(){cur=null;ret=0;if(tab=='search')return finder();const deck=tab=='deck',nm=deck?'deck':'collection';
 const{data}=await sb.from('collections').select('*').eq('kind',tab).order('created_at');
 const rows=(data||[]).map(c=>`<div class="row">${c.thumb_id?`<img class="th" data-id="${c.id}" style="cursor:pointer" loading="lazy" alt="" src="${pic(c.thumb_id)}">`:'<div class="th"></div>'}<button class="link grow" data-id="${c.id}">${esc(c.name)}</button><button data-del="${c.id}" aria-label="Delete ${esc(c.name)}">Delete</button></div>`).join('')||`<p class="mute">No ${nm}s yet. Name your first one below.</p>`;
-app.innerHTML=`${tabsHtml()}${rows}<p><input id="nm" placeholder="${deck?'New deck, e.g. Atraxa EDH':'New collection, e.g. Trade binder'}"><button class="p" id="mk">Create ${nm}</button>${deck?' <button id="imp">Import a deck</button>':''}</p>`;
+app.innerHTML=`${tabsHtml()}${rows}<p><input id="nm" placeholder="${deck?'New deck, e.g. Atraxa EDH':'New collection, e.g. Trade binder'}">${deck?`<select id="nf" class="fs" aria-label="Deck format">${Object.entries(FMT).map(([k,v])=>`<option value="${k}">${v.n}</option>`).join('')}</select>`:''}<button class="p" id="mk">Create ${nm}</button>${deck?' <button id="imp">Import a deck</button>':''}</p>`;
 bindTabs();
 if(deck)$('imp').onclick=importScreen;
-$('mk').onclick=async()=>{if($('nm').value.trim()){await sb.from('collections').insert({name:$('nm').value.trim(),kind:tab});home()}};
+$('mk').onclick=async()=>{if($('nm').value.trim()){await sb.from('collections').insert({name:$('nm').value.trim(),kind:tab,...(tab=='deck'?{format:$('nf').value,format_opts:$('nf').value=='custom'?{min:60,max:null,copies:4,side:15}:null}:{})});home()}};
 app.querySelectorAll('[data-id]').forEach(b=>b.onclick=()=>open(data.find(c=>c.id==b.dataset.id)));
 app.querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{if(confirm(`Delete this ${nm} and its cards?`)){await sb.from('collections').delete().eq('id',b.dataset.del);home()}})}
 function importScreen(){app.innerHTML=`<div class="top"><button id="bk">Back to decks</button></div><h2>Import a deck</h2>
-<p class="mute">Paste a Moxfield or Archidekt link, paste a deck list, or choose a text file. Sideboard and maybeboard cards are skipped.</p>
+<p class="mute">Paste a Moxfield or Archidekt link, paste a deck list, or choose a text file. Sideboard cards go to your sideboard. Maybeboard cards are skipped.</p>
 <input id="iu" autocomplete="off" placeholder="Moxfield or Archidekt link">
 <textarea id="it" rows="8" placeholder="Or paste a deck list, one card per line, e.g. 1 Sol Ring"></textarea>
 <div><input type="file" id="if" accept=".txt,.csv,text/plain"></div>
+<select id="ifmt" class="fs" aria-label="Deck format">${Object.entries(FMT).map(([k,v])=>`<option value="${k}">${v.n}</option>`).join('')}</select>
 <input id="in" autocomplete="off" placeholder="Deck name (optional)">
 <label><input type="checkbox" id="io" checked style="width:auto;margin:0 6px 0 0">I own these cards</label>
 <p><button class="p" id="go">Import deck</button></p><div id="ir"></div>`;
@@ -102,20 +155,20 @@ const res=await fetch(SB_URL+'/functions/v1/import-deck',{method:'POST',headers:
 const j=await res.json();if(!res.ok||j.error)throw new Error(j.error||'The import failed. Please try again.');
 if(!j.cards.length)throw new Error('No cards were found in that deck.');
 const nm=$('in').value.trim()||j.name||'Imported deck';
-const c1=await sb.from('collections').insert({name:nm,kind:'deck'}).select().single();if(c1.error)throw c1.error;col=c1.data;
+const c1=await sb.from('collections').insert({name:nm,kind:'deck',format:$('ifmt').value,format_opts:$('ifmt').value=='custom'?{min:60,max:null,copies:4,side:15}:null}).select().single();if(c1.error)throw c1.error;col=c1.data;
 const own=$('io').checked,m={};
-j.cards.forEach(x=>{const k=x.c.id+'|'+x.finish+'|'+(x.board=='commander');if(m[k])m[k].q+=x.qty;else m[k]={x,q:x.qty}});
-const L=Object.values(m),rows=L.map(({x,q})=>({collection_id:col.id,scryfall_id:x.c.id,finish:x.finish,qty:q,name:x.c.name,type_line:x.c.type_line,colors:x.c.colors,cmc:x.c.cmc,rarity:x.c.rarity,set_name:x.c.set_name,artist:x.c.artist,set_code:x.c.set,collector:x.c.collector_number,details:x.c.details,ownership:own?'owned':'need',is_commander:x.board=='commander'}));
+j.cards.forEach(x=>{const k=x.c.id+'|'+x.finish+'|'+x.board;if(m[k])m[k].q+=x.qty;else m[k]={x,q:x.qty}});
+const L=Object.values(m),rows=L.map(({x,q})=>({collection_id:col.id,scryfall_id:x.c.id,finish:x.finish,qty:q,name:x.c.name,type_line:x.c.type_line,colors:x.c.colors,cmc:x.c.cmc,rarity:x.c.rarity,set_name:x.c.set_name,artist:x.c.artist,set_code:x.c.set,collector:x.c.collector_number,details:x.c.details,ownership:own?'owned':'need',board:x.board=='side'?'side':'main',legalities:x.c.legalities,color_identity:x.c.color_identity,is_commander:x.board=='commander'}));
 for(let i=0;i<rows.length;i+=100){const e=await sb.from('entries').insert(rows.slice(i,i+100));if(e.error)throw e.error}
 const day=new Date().toLocaleDateString('en-CA',{timeZone:'America/New_York'}),pm={};
 L.forEach(({x})=>{if(x.c.price)pm[x.c.id+x.finish]={scryfall_id:x.c.id,finish:x.finish,snap_date:day,usd:x.c.price}});
 if(Object.keys(pm).length)await sb.from('prices').upsert(Object.values(pm),{ignoreDuplicates:true,onConflict:'scryfall_id,finish,snap_date'});
 const cmd=rows.find(x=>x.is_commander);if(cmd){await sb.from('collections').update({thumb_id:cmd.scryfall_id}).eq('id',col.id);col.thumb_id=cmd.scryfall_id}
 const n=rows.reduce((a,x)=>a+x.qty,0);
-r.innerHTML=`<p class="up"><b>Imported ${n} cards</b> (${rows.length} different) into “${esc(nm)}”.</p>${j.missing.length?`<p class="down">Couldn't find ${j.missing.length}: ${j.missing.map(t=>esc(t)).join(', ')}</p>`:''}${j.skipped?`<p class="mute">Skipped ${j.skipped} sideboard or maybeboard cards.</p>`:''}<button class="p" id="op">Open deck</button>`;
+r.innerHTML=`<p class="up"><b>Imported ${n} cards</b> (${rows.length} different) into “${esc(nm)}”.</p>${j.missing.length?`<p class="down">Couldn't find ${j.missing.length}: ${j.missing.map(t=>esc(t)).join(', ')}</p>`:''}${j.skipped?`<p class="mute">Skipped ${j.skipped} maybeboard cards.</p>`:''}<button class="p" id="op">Open deck</button>`;
 $('op').onclick=()=>open(col)
 }catch(e){if(col)await sb.from('collections').delete().eq('id',col.id);r.innerHTML=`<p class="down">${esc(e.message||e)}</p>`;$('go').disabled=false}}
-const fieldsOf=c=>({name:c.name,type_line:c.type_line||c.card_faces?.[0]?.type_line||null,colors:(c.colors||c.card_faces?.[0]?.colors||[]).join(','),cmc:c.cmc,rarity:c.rarity,set_name:c.set_name,artist:c.artist||c.card_faces?.[0]?.artist||null,set_code:c.set,collector:c.collector_number,details:[c.full_art&&'full art',c.border_color=='borderless'&&'borderless',c.promo&&'promo'].filter(Boolean).join(', ')});
+const fieldsOf=c=>({name:c.name,legalities:c.legalities||null,color_identity:(c.color_identity||[]).join(''),type_line:c.type_line||c.card_faces?.[0]?.type_line||null,colors:(c.colors||c.card_faces?.[0]?.colors||[]).join(','),cmc:c.cmc,rarity:c.rarity,set_name:c.set_name,artist:c.artist||c.card_faces?.[0]?.artist||null,set_code:c.set,collector:c.collector_number,details:[c.full_art&&'full art',c.border_color=='borderless'&&'borderless',c.promo&&'promo'].filter(Boolean).join(', ')});
 async function swapScreen(e,c){scrollTo(0,0);app.innerHTML=`<div class="top"><button id="bk">Back to ${esc(c.name)}</button></div><h2>Change printing</h2><div class="mute"><b>${esc(e.name)}</b> · now ${esc(e.set_code).toUpperCase()} #${esc(e.collector)} · ${e.finish}. Pick the printing to use instead. Quantity, owned and commander settings stay as they are.</div><div id="res"><p class="mute">Loading printings…</p></div>`;
 $('bk').onclick=()=>open(c);
 let url=`https://api.scryfall.com/cards/search?unique=prints&order=released&include_extras=true&q=${encodeURIComponent('!"'+e.name+'"')}`;const cards=[];
@@ -127,12 +180,23 @@ return`<div class="row" data-sid="${k.id}"><img class="th" loading="lazy" alt=""
 ${k.finishes.map(f=>{const cur=k.id==e.scryfall_id&&f==e.finish;return`<button data-a="${i}:${f}" ${cur?'disabled':''}>${cur?'✓ current':f+' '+money(+k.prices[COL[f]]||null)}</button>`}).join(' ')}</div>`}).join('');
 res.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>doSwap(e,c,b))}
 async function doSwap(e,c,b){const[i,f]=b.dataset.a.split(':'),k=window._s[i];document.querySelectorAll('[data-a]').forEach(x=>x.disabled=true);
-const ex=await sb.from('entries').select('id,qty,is_commander').eq('collection_id',c.id).eq('scryfall_id',k.id).eq('finish',f).neq('id',e.id);
+const ex=await sb.from('entries').select('id,qty,is_commander').eq('collection_id',c.id).eq('scryfall_id',k.id).eq('finish',f).eq('board',e.board||'main').neq('id',e.id);
 if(ex.data?.length){const t=ex.data[0];await sb.from('entries').update({qty:t.qty+e.qty,is_commander:t.is_commander||e.is_commander}).eq('id',t.id);await sb.from('entries').delete().eq('id',e.id)}
 else await sb.from('entries').update({scryfall_id:k.id,finish:f,...fieldsOf(k)}).eq('id',e.id);
 const p=+k.prices[COL[f]];if(p)await sb.from('prices').upsert({scryfall_id:k.id,finish:f,snap_date:new Date().toLocaleDateString('en-CA',{timeZone:'America/New_York'}),usd:p},{ignoreDuplicates:true,onConflict:'scryfall_id,finish,snap_date'});
 if(c.thumb_id==e.scryfall_id){await sb.from('collections').update({thumb_id:k.id}).eq('id',c.id);c.thumb_id=k.id}
 open(c)}
+function rulesScreen(c){scrollTo(0,0);const o=c.format_opts||{min:60,max:null,copies:4,side:15},f=(id,l,v)=>`<label class="rl">${l}<input id="${id}" type="number" min="0" inputmode="numeric" value="${v??''}" placeholder="No limit"></label>`;
+app.innerHTML=`<div class="top"><button id="bk">Back to ${esc(c.name)}</button></div><h2>Custom rules</h2><p class="mute">Leave a box empty for no limit. Basic lands can always have any number of copies.</p>${f('rm','Minimum main deck cards',o.min)}${f('rx','Maximum main deck cards',o.max)}${f('rc','Copies allowed of any one card',o.copies)}${f('rs','Sideboard size limit',o.side)}<p><button class="p" id="sv">Save rules</button></p>`;
+$('bk').onclick=()=>open(c);
+$('sv').onclick=async()=>{const g=id=>$(id).value===''?null:+$(id).value,o2={min:g('rm'),max:g('rx'),copies:g('rc'),side:g('rs')};await sb.from('collections').update({format_opts:o2}).eq('id',c.id);c.format_opts=o2;open(c)}}
+function manageGroups(c){scrollTo(0,0);const cg=c.custom_groups||{},names=Object.keys(cg);
+app.innerHTML=`<div class="top"><button id="bk">Back to ${esc(c.name)}</button></div><h2>Custom groups</h2><p class="mute">Each card can have one tag per group. Pick a custom group in the Group menu, then tag cards with the dropdown on each card.</p>${names.map((n,i)=>`<h3>${esc(n)} <button class="sm" data-dg="${i}">Delete group</button></h3><div>${cg[n].map((t,j)=>`<button class="sm" data-rt="${i}:${j}" aria-label="Remove tag ${esc(t)}">${esc(t)} ✕</button>`).join(' ')||'<span class="mute">No tags yet.</span>'}</div><input id="nt${i}" placeholder="Add a tag to ${esc(n)}" autocomplete="off"><button class="sm" data-at="${i}">Add tag</button>`).join('')||'<p class="mute">No custom groups yet.</p>'}`;
+const save=async()=>{await sb.from('collections').update({custom_groups:cg}).eq('id',c.id);c.custom_groups=cg;manageGroups(c)};
+$('bk').onclick=()=>open(c);
+app.querySelectorAll('[data-dg]').forEach(b=>b.onclick=()=>{if(confirm('Delete this group? Cards keep their tags, but the group disappears.')){delete cg[names[b.dataset.dg]];save()}});
+app.querySelectorAll('[data-rt]').forEach(b=>b.onclick=()=>{const[i,j]=b.dataset.rt.split(':');cg[names[i]].splice(j,1);save()});
+app.querySelectorAll('[data-at]').forEach(b=>b.onclick=()=>{const i=b.dataset.at,v=$('nt'+i).value.trim();if(v&&!cg[names[i]].includes(v)){cg[names[i]].push(v);save()}})}
 function finder(){ret=0;app.innerHTML=`${tabsHtml()}<input id="fq" autocomplete="off" placeholder="Type a card name, e.g. Sol Ring" value="${esc(lastQ)}"><div id="fr"></div>`;bindTabs();
 const run=async()=>{lastQ=$('fq').value.trim();const r=$('fr');if(lastQ.length<2){r.innerHTML='<p class="mute">Type at least 2 letters to search your collections and decks.</p>';return}
 const[{data:es},{data:cs}]=await Promise.all([sb.from('entries').select('*').ilike('name','%'+lastQ.replace(/[%_]/g,'')+'%'),sb.from('collections').select('id,name,kind,thumb_id')]);
@@ -148,6 +212,8 @@ function chg(h,days){if(h.length<2)return null;const last=h.at(-1),cut=new Date(
 const base=[...h].reverse().find(x=>new Date(x.d)<=cut)||h[0];if(base===last)return null;return(last.usd-base.usd)/base.usd*100}
 const fmt=p=>p==null?'':`<span class="${p>=0?'up':'down'}">${p>=0?'▲':'▼'} ${Math.abs(p).toFixed(1)}%</span>`;
 async function open(c){cur=c;tab=c.kind;const deck=c.kind=='deck';try{grp=localStorage.getItem(deck?'group':'group_c')||(deck?'type':'none')}catch{grp=deck?'type':'none'}const{data:es}=await sb.from('entries').select('*').eq('collection_id',c.id).order('name');
+const customs=Object.keys(c.custom_groups||{});if(grp.startsWith('c:')&&!customs.includes(grp.slice(2)))grp=deck?'type':'none';window._ct=grp.startsWith('c:')?((c.custom_groups||{})[grp.slice(2)]||[]):[];
+const F=deck?fmtOf(c):null,V=deck?validate(c,es):null;
 const ids=[...new Set(es.map(e=>e.scryfall_id))];let ps=[];
 if(ids.length){const r=await sb.from('prices').select('*').in('scryfall_id',ids).order('snap_date');ps=r.data||[]}
 const H={};ps.forEach(p=>(H[p.scryfall_id+p.finish]??=[]).push({d:p.snap_date,usd:+p.usd}));
@@ -158,25 +224,47 @@ const decksFor=n=>`<div class="mute">${inD[n]?'In decks: '+[...inD[n]].map(d=>es
 let total=0,need=0,needN=0,proxyN=0;
 const row=e=>{const h=H[e.scryfall_id+e.finish]||[],now=h.at(-1)?.usd,st=e.ownership||'owned',buy=deck&&st=='need';if(deck&&st=='proxy')proxyN+=e.qty;if(now){total+=now*e.qty;if(buy)need+=now*e.qty}if(buy)needN+=e.qty;
 const tb=`<button class="sm" data-th="${e.id}">${c.thumb_id==e.scryfall_id?'Unset thumbnail':'Set as thumbnail'}</button>`;
-const x=`<div>${deck?`<select class="sm ${st=='need'?'down':st=='proxy'?'mute':''}" data-own="${e.id}" aria-label="Ownership for ${esc(e.name)}">${[['owned','Owned'],['proxy','Proxy'],['need','Need to Buy']].map(([v,l])=>`<option value="${v}"${st==v?' selected':''}>${l}</option>`).join('')}</select> <button class="sm" data-cmd="${e.id}">${e.is_commander?'Unset commander':'Make commander'}</button> `:''}${tb} <button class="sm" data-sw="${e.id}">Change printing</button></div>`;
+const cgn=grp.startsWith('c:')?grp.slice(2):null;
+const tagSel=cgn?`<select class="sm" data-tg="${e.id}" aria-label="${esc(cgn)} tag for ${esc(e.name)}"><option value="">${esc(cgn)}: (none)</option>${((c.custom_groups||{})[cgn]||[]).map(t=>`<option value="${esc(t)}"${(e.tags||{})[cgn]==t?' selected':''}>${esc(t)}</option>`).join('')}<option value="__new">＋ New tag…</option></select>`:'';
+const bdSel=deck?`<select class="sm" data-bd="${e.id}" aria-label="Board for ${esc(e.name)}"><option value="main">Main Deck</option><option value="side"${e.board=='side'?' selected':''}>Sideboard</option></select>`:'';
+const ownSel=deck?`<select class="sm ${st=='need'?'down':st=='proxy'?'mute':''}" data-own="${e.id}" aria-label="Ownership for ${esc(e.name)}">${[['owned','Owned'],['proxy','Proxy'],['need','Need to Buy']].map(([v,l])=>`<option value="${v}"${st==v?' selected':''}>${l}</option>`).join('')}</select>`:'';
+const cmdBtn=deck&&F.cmdr&&e.board!='side'?`<button class="sm" data-cmd="${e.id}">${e.is_commander?'Unset commander':'Make commander'}</button>`:'';
+const x=`<div>${ownSel} ${bdSel} ${cmdBtn} ${tb} <button class="sm" data-sw="${e.id}">Change printing</button> ${tagSel}</div>`;
 if(view=='grid')return`<div class="gc"><img class="gi" loading="lazy" alt="${esc(e.name)}" src="${big(e.scryfall_id)}"><div class="gp"><button class="pbtn" data-hist="${e.id}" aria-label="Price history for ${esc(e.name)}">${money(now)}</button> <span class="mute">${fmt(chg(h,7))||'new'} wk</span></div><div class="mute gn"><b>${esc(e.name)}</b><br>${esc(e.set_code).toUpperCase()} #${esc(e.collector)} · ${e.finish}${e.details?' · '+esc(e.details):''}</div>${x}${deck?'':decksFor(e.name)}<div class="gq"><button data-q="${e.id}:-1" aria-label="Remove one">−</button> ${e.qty} <button data-q="${e.id}:1" aria-label="Add one">+</button></div></div>`;
 return`<div class="row" data-sid="${e.scryfall_id}">${view=='text'?'':`<img class="th" loading="lazy" alt="" src="${pic(e.scryfall_id)}">`}<div class="grow"><b>${esc(e.name)}</b><div class="mute">${esc(e.set_code).toUpperCase()} #${esc(e.collector)} · ${e.finish}${e.details?' · '+esc(e.details):''}</div>${x}${deck?'':decksFor(e.name)}</div>
 ${view=='text'?'':spark(h.map(y=>y.usd))}<div class="num"><button class="pbtn" data-hist="${e.id}" aria-label="Price history for ${esc(e.name)}">${money(now)}</button><div class="mute">${fmt(chg(h,7))||'new'} wk · ${fmt(chg(h,28))||'–'} 4wk</div></div>
 <div><button data-q="${e.id}:-1" aria-label="Remove one">−</button> ${e.qty} <button data-q="${e.id}:1" aria-label="Add one">+</button></div></div>`};
 const srtd=a=>[...a].sort(cmpFor());
 const wrap=a=>a.length?(view=='grid'?`<div class="grid">${srtd(a).map(row).join('')}</div>`:srtd(a).map(row).join('')):'';
-const cm=es.filter(e=>e.is_commander),rest=es.filter(e=>!e.is_commander);
+const side=es.filter(e=>e.board=='side'),mainAll=deck?es.filter(e=>e.board!='side'):es,cm=F&&F.cmdr?mainAll.filter(e=>e.is_commander):[],rest=mainAll.filter(e=>!cm.includes(e));
 const groups=a=>{const g={};a.forEach(e=>{const k=keyOf(e);(g[k]??={k,s:sortOf(e,k),a:[]}).a.push(e)});
 return Object.values(g).sort((x,y)=>typeof x.s=='number'&&typeof y.s=='number'?x.s-y.s:String(x.s).localeCompare(String(y.s)))};
 const gh=a=>groups(a).map(({k,a})=>`<h3>${esc(k)} <span class="mute">(${a.reduce((n,e)=>n+e.qty,0)})</span></h3>${wrap(a)}`).join('');
 const cats=!rest.length?'<p class="mute">No other cards yet.</p>':grp=='none'?`<h3>Main deck</h3>${wrap(rest)}`:gh(rest);
-const gdd=dd('Group',GL,grp,'data-g'),sdd=dd('Sort',SL,srt,'data-s');
-const body=deck?`<h3>Commander</h3>${wrap(cm)||'<p class="mute">No commander yet. Tap “Make commander” on a card below.</p>'}${cats}`:(es.length?(grp=='none'?wrap(es):gh(es)):'<p class="mute">Empty. Use “Add card” to search by name and pick a printing.</p>');
+const GLc=GL.concat(customs.map(n=>['c:'+n,n]));
+const gx=`<button role="menuitem" data-gnew="1">＋ New custom group…</button>${customs.length?'<button role="menuitem" data-gman="1">Manage custom groups</button>':''}`;
+const gdd=dd('Group',GLc,grp,'data-g',gx),sdd=dd('Sort',SL,srt,'data-s');
+const fdd=deck?dd('Format',Object.entries(FMT).map(([k,v])=>[k,v.n]),c.format||'commander','data-f'):'';
+const erb=deck&&F.custom?'<div><button class="sm" id="er">Edit custom rules</button></div>':'';
+const sideSec=side.length?`<h3>Sideboard <span class="mute">(${side.reduce((n,e)=>n+e.qty,0)})</span></h3>${wrap(side)}`:'';
+const body=deck?`${F.cmdr?`<h3>${F.oath?'Oathbreaker &amp; signature spell':'Commander'}</h3>${wrap(cm)||'<p class="mute">Not chosen yet. Tap “Make commander” on a card below.</p>'}`:''}${cats}${sideSec}`:(es.length?(grp=='none'?wrap(es):gh(es)):'<p class="mute">Empty. Use “Add card” to search by name and pick a printing.</p>');
 const n=es.reduce((a,e)=>a+e.qty,0);
-const info=deck?`<div class="mute"><b class="${n==100?'up':n>100?'down':''}">${n} / 100 cards</b> · ${n<100?(100-n)+' to go':n>100?(n-100)+' over':'deck is full'}</div><div class="mute">${needN?`Still need ${needN} card${needN>1?'s':''} · ${money(need)} to buy`:'You have every card in this deck'}${proxyN?` · ${proxyN} proxy card${proxyN>1?'s':''}`:''}</div>`:`<div class="mute">${n} cards, latest prices</div>`;
-app.innerHTML=`<div class="top"><button id="bk">Back to ${deck?'decks':'collections'}</button><button class="p" id="ad">Add card</button></div><h2>${esc(c.name)}</h2><div class="total">${money(total)}</div>${info}${dd('Display',[['list','List'],['grid','Grid'],['text','Text only']],view,'data-v')}${gdd}${sdd}${body}`;
+const vp=V?`<div class="vp" role="status"><div class="mute">${ruleText(F)}</div>${V.out.length?V.out.map(([l,t])=>`<div class="${l=='err'?'down':'warn'}">${l=='err'?'✖':'⚠'} ${t}</div>`).join(''):`<div class="up">✓ Legal for ${esc(F.n)}</div>`}</div>`:'';
+const okc=V?(V.out.some(z=>z[0]=='err')?'down':(F.max!=null?V.mn==F.max:F.min!=null?V.mn>=F.min:true)?'up':''):'';
+const info=deck?`<div class="mute"><b class="${okc}">${V.mn}${F.max!=null?' / '+F.max:F.min!=null?' (min '+F.min+')':''} main deck cards</b>${F.side!=null||V.sn?` · Sideboard ${V.sn}${F.side!=null?' / '+F.side:''}`:''}</div><div class="mute">${needN?`Still need ${needN} card${needN>1?'s':''} · ${money(need)} to buy`:'You have every card in this deck'}${proxyN?` · ${proxyN} proxy card${proxyN>1?'s':''}`:''}</div>${vp}`:`<div class="mute">${n} cards, latest prices</div>`;
+app.innerHTML=`<div class="top"><button id="bk">Back to ${deck?'decks':'collections'}</button><button class="p" id="ad">Add card</button></div><h2>${esc(c.name)}</h2><div class="total">${money(total)}</div>${info}${fdd}${dd('Display',[['list','List'],['grid','Grid'],['text','Text only']],view,'data-v')}${gdd}${sdd}${erb}${body}`;
 if(ret){const y=ret;ret=0;requestAnimationFrame(()=>scrollTo(0,y))}else scrollTo(0,0);
 app.querySelectorAll('[data-hist]').forEach(b=>b.onclick=()=>{const e=es.find(x=>x.id==b.dataset.hist);showHist(e,H[e.scryfall_id+e.finish]||[])});
+app.querySelectorAll('[data-bd]').forEach(b=>b.onchange=async()=>{const e=es.find(z=>z.id==b.dataset.bd),u={board:b.value};if(b.value=='side')u.is_commander=false;await sb.from('entries').update(u).eq('id',e.id);reopen(c)});
+app.querySelectorAll('[data-tg]').forEach(b=>b.onchange=async()=>{const e=es.find(z=>z.id==b.dataset.tg),n=grp.slice(2);let v=b.value;
+if(v=='__new'){v=(prompt('New tag for the group "'+n+'":')||'').trim();if(!v){reopen(c);return}const cg={...(c.custom_groups||{})};if(!(cg[n]||[]).includes(v)){cg[n]=[...(cg[n]||[]),v];await sb.from('collections').update({custom_groups:cg}).eq('id',c.id);c.custom_groups=cg}}
+const t={...(e.tags||{})};if(v)t[n]=v;else delete t[n];await sb.from('entries').update({tags:t}).eq('id',e.id);reopen(c)});
+app.querySelectorAll('[data-gnew]').forEach(b=>b.onclick=async()=>{const n=(prompt('Name for your new custom group (for example Role or Archetype):')||'').trim();if(!n)return;
+if(n.includes(':')||GL.some(g=>g[1].toLowerCase()==n.toLowerCase())||customs.includes(n)){alert('Please choose a different name.');return}
+const cg={...(c.custom_groups||{}),[n]:[]};await sb.from('collections').update({custom_groups:cg}).eq('id',c.id);c.custom_groups=cg;grp='c:'+n;try{localStorage.setItem(deck?'group':'group_c',grp)}catch{}open(c)});
+app.querySelectorAll('[data-gman]').forEach(b=>b.onclick=()=>manageGroups(c));
+app.querySelectorAll('[data-f]').forEach(b=>b.onclick=async()=>{const v=b.dataset.f,o=v=='custom'?(c.format_opts||{min:60,max:null,copies:4,side:15}):c.format_opts;await sb.from('collections').update({format:v,format_opts:o}).eq('id',c.id);c.format=v;c.format_opts=o;reopen(c)});
+if($('er'))$('er').onclick=()=>rulesScreen(c);
 app.querySelectorAll('[data-v]').forEach(b=>b.onclick=()=>{view=b.dataset.v;try{localStorage.setItem('view',view)}catch{}open(c)});
 app.querySelectorAll('[data-sw]').forEach(b=>b.onclick=()=>{ret=scrollY;swapScreen(es.find(x=>x.id==b.dataset.sw),c)});
 app.querySelectorAll('[data-th]').forEach(b=>b.onclick=async()=>{const e=es.find(x=>x.id==b.dataset.th),id=c.thumb_id==e.scryfall_id?null:e.scryfall_id;await sb.from('collections').update({thumb_id:id}).eq('id',c.id);c.thumb_id=id;reopen(c)});
@@ -196,7 +284,7 @@ document.body.appendChild(m);
 const close=()=>{m.remove();document.removeEventListener('keydown',onKey)},onKey=ev=>{if(ev.key=='Escape')close()};
 document.addEventListener('keydown',onKey);m.onclick=ev=>{if(ev.target==m)close()};$('hx').onclick=close;$('hx').focus();
 $('hcsv').onclick=()=>{const csv='Date,Price (USD)\n'+h.map(x=>x.d+','+x.usd.toFixed(2)).join('\n'),a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download=(e.name+' '+e.set_code+' '+e.finish+' prices.csv').replace(/[^\w. -]/g,'');a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}}
-function search(){scrollTo(0,0);app.innerHTML=`<div class="top"><button id="bk">Back to ${esc(cur.name)}</button></div><h2>Add a card</h2>${cur.kind=='deck'?'<label><input type="checkbox" id="own" checked style="width:auto;margin:0 6px 0 0">I own these cards</label>':''}<input id="q" autocomplete="off" placeholder="Exact card name, e.g. Sol Ring"><button class="p" id="go">Find printings</button><div id="res"></div>`;
+function search(){scrollTo(0,0);app.innerHTML=`<div class="top"><button id="bk">Back to ${esc(cur.name)}</button></div><h2>Add a card</h2>${cur.kind=='deck'?'<label><input type="checkbox" id="own" checked style="width:auto;margin:0 6px 0 0">I own these cards</label> <label style="margin-left:12px">Add to <select id="ab" class="sm"><option value="main">Main Deck</option><option value="side">Sideboard</option></select></label>':''}<input id="q" autocomplete="off" placeholder="Exact card name, e.g. Sol Ring"><button class="p" id="go">Find printings</button><div id="res"></div>`;
 $('bk').onclick=()=>open(cur);$('go').onclick=find;$('q').onkeydown=e=>{if(e.key=='Enter')find()}}
 async function find(){const n=$('q').value.trim(),res=$('res');if(!n)return;res.innerHTML='<p class="mute">Searching…</p>';
 const url=q=>`https://api.scryfall.com/cards/search?unique=prints&order=released&include_extras=true&q=${encodeURIComponent(q)}`;
@@ -207,16 +295,18 @@ res.innerHTML=cards.map((c,i)=>{const d=[c.full_art&&'full art',c.border_color==
 return`<div class="row" data-sid="${c.id}"><img class="th" loading="lazy" alt="" src="${pic(c.id)}"><div class="grow"><b>${esc(c.name)}</b><div class="mute">${esc(c.set_name)} (${c.set.toUpperCase()}) #${esc(c.collector_number)}${d?' · '+esc(d):''}</div></div>
 ${c.finishes.map(f=>`<button data-a="${i}:${f}">${f} ${money(+c.prices[COL[f]]||null)}</button>`).join(' ')}</div>`}).join('');
 res.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>add(b))}
-async function add(b){const[i,f]=b.dataset.a.split(':'),c=window._c[i];b.disabled=true;
-const{data:ex}=await sb.from('entries').select('id,qty').eq('collection_id',cur.id).eq('scryfall_id',c.id).eq('finish',f);
+async function add(b){const[i,f]=b.dataset.a.split(':'),c=window._c[i];b.disabled=true;const bd=$('ab')?$('ab').value:'main';
+const{data:ex}=await sb.from('entries').select('id,qty').eq('collection_id',cur.id).eq('scryfall_id',c.id).eq('finish',f).eq('board',bd);
 if(ex?.length)await sb.from('entries').update({qty:ex[0].qty+1}).eq('id',ex[0].id);
-else await sb.from('entries').insert({collection_id:cur.id,scryfall_id:c.id,finish:f,ownership:$('own')&&!$('own').checked?'need':'owned',name:c.name,type_line:c.type_line||c.card_faces?.[0]?.type_line||null,colors:(c.colors||c.card_faces?.[0]?.colors||[]).join(','),cmc:c.cmc,rarity:c.rarity,set_name:c.set_name,artist:c.artist||c.card_faces?.[0]?.artist||null,set_code:c.set,collector:c.collector_number,
+else await sb.from('entries').insert({collection_id:cur.id,scryfall_id:c.id,finish:f,board:bd,legalities:c.legalities||null,color_identity:(c.color_identity||[]).join(''),ownership:$('own')&&!$('own').checked?'need':'owned',name:c.name,type_line:c.type_line||c.card_faces?.[0]?.type_line||null,colors:(c.colors||c.card_faces?.[0]?.colors||[]).join(','),cmc:c.cmc,rarity:c.rarity,set_name:c.set_name,artist:c.artist||c.card_faces?.[0]?.artist||null,set_code:c.set,collector:c.collector_number,
 details:[c.full_art&&'full art',c.border_color=='borderless'&&'borderless',c.promo&&'promo'].filter(Boolean).join(', ')});
 const p=+c.prices[COL[f]];if(p)await sb.from('prices').upsert({scryfall_id:c.id,finish:f,snap_date:new Date().toLocaleDateString('en-CA',{timeZone:'America/New_York'}),usd:p},{ignoreDuplicates:true});
 b.textContent='Added ✓'}
 const pv=document.getElementById('pv'),big=id=>`https://cards.scryfall.io/normal/front/${id[0]}/${id[1]}/${id}.jpg`;
-app.addEventListener('mouseover',e=>{const r=e.target.closest('[data-sid]');if(r){pv.src=big(r.dataset.sid);pv.style.display='block'}else pv.style.display='none'});
-app.addEventListener('mousemove',e=>{if(pv.style.display=='block'){pv.style.left=Math.min(e.clientX+20,innerWidth-264)+'px';pv.style.top=Math.max(8,Math.min(e.clientY-170,innerHeight-350))+'px'}});
+const place=e=>{pv.style.left=Math.min(e.clientX+20,innerWidth-264)+'px';pv.style.top=Math.max(8,Math.min(e.clientY-170,innerHeight-350))+'px'};
+const pvShow=e=>{const t=e.target.closest('.th,.gi,[data-sid] b'),r=t&&t.closest('[data-sid]');if(r){pv.src=big(r.dataset.sid);place(e);pv.style.display='block'}else pv.style.display='none'};
+app.addEventListener('mouseover',pvShow);app.addEventListener('click',pvShow);
+app.addEventListener('mousemove',e=>{if(pv.style.display=='block')place(e)});
 app.addEventListener('mouseleave',()=>pv.style.display='none');
 const tb=document.getElementById('top');
 addEventListener('scroll',()=>tb.classList.toggle('show',scrollY>300),{passive:true});
