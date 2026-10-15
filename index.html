@@ -32,6 +32,7 @@ h3{font:600 17px Georgia,serif;margin:18px 0 0}.sm{padding:3px 8px;font-size:12p
 .dd{position:relative;display:inline-block;margin:10px 8px 10px 0}.ddm{position:absolute;left:0;top:100%;margin-top:4px;background:var(--panel);border:1px solid var(--ink);border-radius:6px;min-width:170px;z-index:12;padding:4px;box-shadow:0 6px 18px #0005}
 .ddm button{display:block;width:100%;text-align:left;border:0;padding:8px 10px}.ddm button[aria-checked=true]{font-weight:700}
 .dg{display:inline-flex;align-items:center;gap:6px;margin:8px 16px 8px 0}.dg .dd{margin:0}.dl{font-weight:600}
+textarea{width:100%;padding:10px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);font:inherit;margin:4px 0}
 </style></head><body><main id="app"></main><img id="pv" alt=""><button id="top" aria-label="Back to top" title="Back to top">↑</button>
 <script>
 const SB_URL='https://wihratryjsmcbpsistkj.supabase.co',SB_KEY='sb_publishable_6k9ibJeQe9iDIxYOCxgPPA_tJTjth8f';
@@ -75,11 +76,43 @@ let lastQ='';
 async function home(){cur=null;if(tab=='search')return finder();const deck=tab=='deck',nm=deck?'deck':'collection';
 const{data}=await sb.from('collections').select('*').eq('kind',tab).order('created_at');
 const rows=(data||[]).map(c=>`<div class="row">${c.thumb_id?`<img class="th" data-id="${c.id}" style="cursor:pointer" loading="lazy" alt="" src="${pic(c.thumb_id)}">`:'<div class="th"></div>'}<button class="link grow" data-id="${c.id}">${esc(c.name)}</button><button data-del="${c.id}" aria-label="Delete ${esc(c.name)}">Delete</button></div>`).join('')||`<p class="mute">No ${nm}s yet. Name your first one below.</p>`;
-app.innerHTML=`${tabsHtml()}${rows}<p><input id="nm" placeholder="${deck?'New deck, e.g. Atraxa EDH':'New collection, e.g. Trade binder'}"><button class="p" id="mk">Create ${nm}</button></p>`;
+app.innerHTML=`${tabsHtml()}${rows}<p><input id="nm" placeholder="${deck?'New deck, e.g. Atraxa EDH':'New collection, e.g. Trade binder'}"><button class="p" id="mk">Create ${nm}</button>${deck?' <button id="imp">Import a deck</button>':''}</p>`;
 bindTabs();
+if(deck)$('imp').onclick=importScreen;
 $('mk').onclick=async()=>{if($('nm').value.trim()){await sb.from('collections').insert({name:$('nm').value.trim(),kind:tab});home()}};
 app.querySelectorAll('[data-id]').forEach(b=>b.onclick=()=>open(data.find(c=>c.id==b.dataset.id)));
 app.querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{if(confirm(`Delete this ${nm} and its cards?`)){await sb.from('collections').delete().eq('id',b.dataset.del);home()}})}
+function importScreen(){app.innerHTML=`<div class="top"><button id="bk">Back to decks</button></div><h2>Import a deck</h2>
+<p class="mute">Paste a Moxfield or Archidekt link, paste a deck list, or choose a text file. Sideboard and maybeboard cards are skipped.</p>
+<input id="iu" autocomplete="off" placeholder="Moxfield or Archidekt link">
+<textarea id="it" rows="8" placeholder="Or paste a deck list, one card per line, e.g. 1 Sol Ring"></textarea>
+<div><input type="file" id="if" accept=".txt,.csv,text/plain"></div>
+<input id="in" autocomplete="off" placeholder="Deck name (optional)">
+<label><input type="checkbox" id="io" checked style="width:auto;margin:0 6px 0 0">I own these cards</label>
+<p><button class="p" id="go">Import deck</button></p><div id="ir"></div>`;
+$('bk').onclick=home;$('go').onclick=doImport;
+$('if').onchange=async e=>{const f=e.target.files[0];if(f){$('it').value=await f.text();$('iu').value='';if(!$('in').value)$('in').value=f.name.replace(/\.[^.]+$/,'')}}}
+async function doImport(){const url=$('iu').value.trim(),text=$('it').value.trim(),r=$('ir');let col=null;
+if(!url&&!text){r.innerHTML='<p class="down">Paste a link or a deck list, or choose a file.</p>';return}
+$('go').disabled=true;r.innerHTML='<p class="mute">Reading the deck and looking up each card. This can take a few seconds…</p>';
+try{
+const res=await fetch(SB_URL+'/functions/v1/import-deck',{method:'POST',headers:{'Content-Type':'application/json',apikey:SB_KEY},body:JSON.stringify(url?{url}:{text})});
+const j=await res.json();if(!res.ok||j.error)throw new Error(j.error||'The import failed. Please try again.');
+if(!j.cards.length)throw new Error('No cards were found in that deck.');
+const nm=$('in').value.trim()||j.name||'Imported deck';
+const c1=await sb.from('collections').insert({name:nm,kind:'deck'}).select().single();if(c1.error)throw c1.error;col=c1.data;
+const own=$('io').checked,m={};
+j.cards.forEach(x=>{const k=x.c.id+'|'+x.finish+'|'+(x.board=='commander');if(m[k])m[k].q+=x.qty;else m[k]={x,q:x.qty}});
+const L=Object.values(m),rows=L.map(({x,q})=>({collection_id:col.id,scryfall_id:x.c.id,finish:x.finish,qty:q,name:x.c.name,type_line:x.c.type_line,colors:x.c.colors,cmc:x.c.cmc,rarity:x.c.rarity,set_name:x.c.set_name,artist:x.c.artist,set_code:x.c.set,collector:x.c.collector_number,details:x.c.details,owned:own,is_commander:x.board=='commander'}));
+for(let i=0;i<rows.length;i+=100){const e=await sb.from('entries').insert(rows.slice(i,i+100));if(e.error)throw e.error}
+const day=new Date().toLocaleDateString('en-CA',{timeZone:'America/New_York'}),pm={};
+L.forEach(({x})=>{if(x.c.price)pm[x.c.id+x.finish]={scryfall_id:x.c.id,finish:x.finish,snap_date:day,usd:x.c.price}});
+if(Object.keys(pm).length)await sb.from('prices').upsert(Object.values(pm),{ignoreDuplicates:true,onConflict:'scryfall_id,finish,snap_date'});
+const cmd=rows.find(x=>x.is_commander);if(cmd){await sb.from('collections').update({thumb_id:cmd.scryfall_id}).eq('id',col.id);col.thumb_id=cmd.scryfall_id}
+const n=rows.reduce((a,x)=>a+x.qty,0);
+r.innerHTML=`<p class="up"><b>Imported ${n} cards</b> (${rows.length} different) into “${esc(nm)}”.</p>${j.missing.length?`<p class="down">Couldn't find ${j.missing.length}: ${j.missing.map(t=>esc(t)).join(', ')}</p>`:''}${j.skipped?`<p class="mute">Skipped ${j.skipped} sideboard or maybeboard cards.</p>`:''}<button class="p" id="op">Open deck</button>`;
+$('op').onclick=()=>open(col)
+}catch(e){if(col)await sb.from('collections').delete().eq('id',col.id);r.innerHTML=`<p class="down">${esc(e.message||e)}</p>`;$('go').disabled=false}}
 function finder(){app.innerHTML=`${tabsHtml()}<input id="fq" autocomplete="off" placeholder="Type a card name, e.g. Sol Ring" value="${esc(lastQ)}"><div id="fr"></div>`;bindTabs();
 const run=async()=>{lastQ=$('fq').value.trim();const r=$('fr');if(lastQ.length<2){r.innerHTML='<p class="mute">Type at least 2 letters to search your collections and decks.</p>';return}
 const[{data:es},{data:cs}]=await Promise.all([sb.from('entries').select('*').ilike('name','%'+lastQ.replace(/[%_]/g,'')+'%'),sb.from('collections').select('id,name,kind,thumb_id')]);
