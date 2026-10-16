@@ -36,6 +36,8 @@ textarea{width:100%;padding:10px;border:1px solid var(--line);border-radius:6px;
 select.sm{padding:3px 6px;font:inherit;font-size:12px;margin-top:4px;color:inherit;background:var(--panel);border:1px solid var(--ink);border-radius:6px}
 .warn{color:var(--warn)}.vp{margin:8px 0;padding:8px 10px;border:1px solid var(--line);border-radius:8px}.vp div{margin:3px 0}
 select.fs{padding:10px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:inherit;font:inherit;width:100%;margin:4px 0}.rl{display:block;margin:8px 0}
+.tw{position:relative;flex:none}.tw.tg{width:100%}.tw .th{display:block}
+.flip{position:absolute;left:50%;bottom:4px;transform:translateX(-50%);padding:2px 8px;font-size:12px;line-height:1.4;border-radius:12px;background:#000c;color:#fff;border:1px solid #fff9;cursor:pointer;white-space:nowrap}
 </style></head><body><main id="app"></main><img id="pv" alt=""><button id="top" aria-label="Back to top" title="Back to top">↑</button>
 <script>
 const SB_URL='https://wihratryjsmcbpsistkj.supabase.co',SB_KEY='sb_publishable_6k9ibJeQe9iDIxYOCxgPPA_tJTjth8f';
@@ -218,7 +220,9 @@ const n=rows.reduce((a,x)=>a+x.qty,0);
 r.innerHTML=`<p class="up"><b>Imported ${n} cards</b> (${rows.length} different) into “${esc(nm)}”.</p>${j.missing.length?`<p class="down">Couldn't find ${j.missing.length}: ${j.missing.map(t=>esc(t)).join(', ')}</p>`:''}${j.skipped?`<p class="mute">Skipped ${j.skipped} maybeboard cards.</p>`:''}<button class="p" id="op">Open deck</button>`;
 $('op').onclick=()=>open(col)
 }catch(e){if(col)await sb.from('collections').delete().eq('id',col.id);r.innerHTML=`<p class="down">${esc(e.message||e)}</p>`;$('go').disabled=false}}
-const extraOf=c=>({legalities:c.legalities||null,color_identity:(c.color_identity||[]).join(''),keywords:c.keywords||(c.card_faces&&c.card_faces[0]&&c.card_faces[0].keywords)||[],oracle_text:c.oracle_text||(c.card_faces||[]).map(f=>f.oracle_text).filter(Boolean).join('\n')||null,mana_cost:c.mana_cost||(c.card_faces&&c.card_faces[0]&&c.card_faces[0].mana_cost)||''});
+const DFC=l=>['transform','modal_dfc','reversible_card','double_faced_token'].includes(l);
+const thumb=(id,l,big,alt='')=>`<div class="tw${big?' tg':''}"><img class="${big?'gi':'th'}" loading="lazy" alt="${alt}" src="${big?`https://cards.scryfall.io/normal/front/${id[0]}/${id[1]}/${id}.jpg`:pic(id)}">${DFC(l)?`<button class="flip" data-flip="1" aria-label="Flip card to see the other side" title="Flip card">${big?'⟲ Flip':'⟲'}</button>`:''}</div>`;
+const extraOf=c=>({layout:c.layout||null,legalities:c.legalities||null,color_identity:(c.color_identity||[]).join(''),keywords:c.keywords||(c.card_faces&&c.card_faces[0]&&c.card_faces[0].keywords)||[],oracle_text:c.oracle_text||(c.card_faces||[]).map(f=>f.oracle_text).filter(Boolean).join('\n')||null,mana_cost:c.mana_cost||(c.card_faces&&c.card_faces[0]&&c.card_faces[0].mana_cost)||''});
 const fieldsOf=c=>({name:c.name,...extraOf(c),type_line:c.type_line||c.card_faces?.[0]?.type_line||null,colors:(c.colors||c.card_faces?.[0]?.colors||[]).join(','),cmc:c.cmc,rarity:c.rarity,set_name:c.set_name,artist:c.artist||c.card_faces?.[0]?.artist||null,set_code:c.set,collector:c.collector_number,details:[c.full_art&&'full art',c.border_color=='borderless'&&'borderless',c.promo&&'promo'].filter(Boolean).join(', ')});
 async function swapScreen(e,c){scrollTo(0,0);app.innerHTML=`<div class="top"><button id="bk">Back to ${esc(c.name)}</button></div><h2>Change printing</h2><div class="mute"><b>${esc(e.name)}</b> · now ${esc(e.set_code).toUpperCase()} #${esc(e.collector)} · ${e.finish}. Pick the printing to use instead. Quantity, owned and commander settings stay as they are.</div><div id="res"><p class="mute">Loading printings…</p></div>`;
 $('bk').onclick=()=>open(c);
@@ -339,8 +343,8 @@ const cmdBtn=deck&&F.oath&&(e.board||'main')=='main'?`<button class="sm" data-cm
 const swBtn=deck&&F.cmdr&&!F.oath&&e.is_commander&&(e.board||'main')=='main'?`<button class="sm" data-swc="${e.id}">Swap Commander</button>${ncm>1?` <button class="sm" data-cmd="${e.id}">Unset commander</button>`:''}`:'';
 const compBtn=deck&&e.board=='companion'?`<button class="sm" data-swcmp="${e.id}">Swap Companion</button> <button class="sm" data-rmcmp="${e.id}">Remove companion</button>`:'';
 const x=`<div>${ownSel} ${bdSel} ${cmdBtn}${swBtn}${compBtn} ${tb} <button class="sm" data-sw="${e.id}">Change printing</button> ${tagSel}</div>`;
-if(view=='grid')return`<div class="gc"><img class="gi" loading="lazy" alt="${esc(e.name)}" src="${big(e.scryfall_id)}"><div class="gp"><button class="pbtn" data-hist="${e.id}" aria-label="Price history for ${esc(e.name)}">${money(now)}</button> <span class="mute">${fmt(chg(h,7))||'new'} wk</span></div><div class="mute gn"><b>${esc(e.name)}</b><br>${esc(e.set_code).toUpperCase()} #${esc(e.collector)} · ${e.finish}${e.details?' · '+esc(e.details):''}</div>${x}${deck?'':decksFor(e.name)}<div class="gq"><button data-q="${e.id}:-1" aria-label="Remove one">−</button> ${e.qty} <button data-q="${e.id}:1" aria-label="Add one">+</button></div></div>`;
-return`<div class="row" data-sid="${e.scryfall_id}">${view=='text'?'':`<img class="th" loading="lazy" alt="" src="${pic(e.scryfall_id)}">`}<div class="grow"><b>${esc(e.name)}</b><div class="mute">${esc(e.set_code).toUpperCase()} #${esc(e.collector)} · ${e.finish}${e.details?' · '+esc(e.details):''}</div>${x}${deck?'':decksFor(e.name)}</div>
+if(view=='grid')return`<div class="gc">${thumb(e.scryfall_id,e.layout,1,esc(e.name))}<div class="gp"><button class="pbtn" data-hist="${e.id}" aria-label="Price history for ${esc(e.name)}">${money(now)}</button> <span class="mute">${fmt(chg(h,7))||'new'} wk</span></div><div class="mute gn"><b>${esc(e.name)}</b><br>${esc(e.set_code).toUpperCase()} #${esc(e.collector)} · ${e.finish}${e.details?' · '+esc(e.details):''}</div>${x}${deck?'':decksFor(e.name)}<div class="gq"><button data-q="${e.id}:-1" aria-label="Remove one">−</button> ${e.qty} <button data-q="${e.id}:1" aria-label="Add one">+</button></div></div>`;
+return`<div class="row" data-sid="${e.scryfall_id}">${view=='text'?'':thumb(e.scryfall_id,e.layout,0)}<div class="grow"><b>${esc(e.name)}</b><div class="mute">${esc(e.set_code).toUpperCase()} #${esc(e.collector)} · ${e.finish}${e.details?' · '+esc(e.details):''}</div>${x}${deck?'':decksFor(e.name)}</div>
 ${view=='text'?'':spark(h.map(y=>y.usd))}<div class="num"><button class="pbtn" data-hist="${e.id}" aria-label="Price history for ${esc(e.name)}">${money(now)}</button><div class="mute">${fmt(chg(h,7))||'new'} wk · ${fmt(chg(h,28))||'–'} 4wk</div></div>
 <div><button data-q="${e.id}:-1" aria-label="Remove one">−</button> ${e.qty} <button data-q="${e.id}:1" aria-label="Add one">+</button></div></div>`};
 const srtd=a=>[...a].sort(cmpFor());
@@ -406,7 +410,7 @@ let r=await fetch(url(`!"${n}"`));if(!r.ok)r=await fetch(url(n));
 if(!r.ok){res.innerHTML='<p class="down">No cards found. Check the spelling and try again.</p>';return}
 const cards=(await r.json()).data;window._c=cards;
 res.innerHTML=cards.map((c,i)=>{const d=[c.full_art&&'full art',c.border_color=='borderless'&&'borderless',c.promo&&'promo',...(c.frame_effects||[])].filter(Boolean).join(', ');
-return`<div class="row" data-sid="${c.id}"><img class="th" loading="lazy" alt="" src="${pic(c.id)}"><div class="grow"><b>${esc(c.name)}</b><div class="mute">${esc(c.set_name)} (${c.set.toUpperCase()}) #${esc(c.collector_number)}${d?' · '+esc(d):''}</div></div>
+return`<div class="row" data-sid="${c.id}">${thumb(c.id,c.layout,0)}<div class="grow"><b>${esc(c.name)}</b><div class="mute">${esc(c.set_name)} (${c.set.toUpperCase()}) #${esc(c.collector_number)}${d?' · '+esc(d):''}</div></div>
 ${c.finishes.map(f=>`<button data-a="${i}:${f}">${f} ${money(+c.prices[COL[f]]||null)}</button>`).join(' ')}</div>`}).join('');
 res.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>add(b))}
 async function add(b){const[i,f]=b.dataset.a.split(':'),c=window._c[i];b.disabled=true;const bd=$('ab')?$('ab').value:'main';
@@ -421,6 +425,7 @@ const place=e=>{pv.style.left=Math.min(e.clientX+20,innerWidth-264)+'px';pv.styl
 const pvShow=e=>{const t=e.target.closest('.th,.gi,[data-sid] b'),r=t&&t.closest('[data-sid]');if(r){pv.src=big(r.dataset.sid);place(e);pv.style.display='block'}else pv.style.display='none'};
 app.addEventListener('mouseover',pvShow);app.addEventListener('click',pvShow);
 app.addEventListener('mousemove',e=>{if(pv.style.display=='block')place(e)});
+app.addEventListener('click',e=>{const b=e.target.closest('[data-flip]');if(!b)return;const im=b.parentElement.querySelector('img'),back=im.src.includes('/back/');im.onerror=()=>{im.onerror=null;im.src=im.src.replace('/back/','/front/')};im.src=back?im.src.replace('/back/','/front/'):im.src.replace('/front/','/back/')});
 app.addEventListener('mouseleave',()=>pv.style.display='none');
 const tb=document.getElementById('top');
 addEventListener('scroll',()=>tb.classList.toggle('show',scrollY>300),{passive:true});
