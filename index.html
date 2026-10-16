@@ -43,6 +43,11 @@ select.fs{padding:10px;border:1px solid var(--line);border-radius:6px;background
 .gcb{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:10px;font-size:11px;font-weight:600;color:#1a1200;background:#e3b341;vertical-align:middle}
 .setm{max-height:55vh;overflow:auto;min-width:260px;max-width:92vw}.ck{display:flex;gap:8px;align-items:center;padding:8px 10px;cursor:pointer}.ck input{width:auto;margin:0;padding:0}
 button[data-a][aria-pressed=true]{background:var(--acc);color:var(--bg)}
+.stats{display:grid;gap:14px;margin-top:8px}.sc{padding:10px 12px;border:1px solid var(--line);border-radius:8px}.sc h4{margin:0 0 8px;font:600 15px Georgia,serif}
+.pies{display:grid;grid-template-columns:1fr;gap:14px}@media(min-width:700px){.pies{grid-template-columns:1fr 1fr}}
+.pie{display:flex;gap:14px;align-items:center;flex-wrap:wrap}.leg{list-style:none;margin:0;padding:0;font-size:13px}.leg li{display:flex;align-items:center;gap:6px;margin:3px 0}
+.sw{width:12px;height:12px;border-radius:3px;border:1px solid currentColor;display:inline-block;flex:none}
+.tr{display:grid;grid-template-columns:110px 1fr 34px;gap:8px;align-items:center;font-size:14px;margin:4px 0}.tr b{text-align:right}.tb{height:8px;border-radius:4px;background:var(--acc);opacity:.75;display:block}
 </style></head><body><main id="app"></main><img id="pv" alt=""><button id="top" aria-label="Back to top" title="Back to top">↑</button>
 <script>
 const SB_URL='https://wihratryjsmcbpsistkj.supabase.co',SB_KEY='sb_publishable_6k9ibJeQe9iDIxYOCxgPPA_tJTjth8f';
@@ -231,7 +236,7 @@ $('op').onclick=()=>open(col)
 const DFC=l=>['transform','modal_dfc','reversible_card','double_faced_token'].includes(l);
 const thumb=(id,l,big,alt='')=>`<div class="tw${big?' tg':''}"><img class="${big?'gi':'th'}" loading="lazy" alt="${alt}" src="${big?`https://cards.scryfall.io/normal/front/${id[0]}/${id[1]}/${id}.jpg`:pic(id)}">${DFC(l)?`<button class="flip" data-flip="1" aria-label="Flip card to see the other side" title="Flip card">${big?'⟲ Flip':'⟲'}</button>`:''}</div>`;
 const star=(k,id,on)=>`<button class="star${on?' on':''}" data-fav="${k}:${id}" aria-pressed="${!!on}" aria-label="${on?'Remove from favorites':'Add to favorites'}" title="${on?'Favorite (tap to remove)':'Add to favorites'}">${on?'★':'☆'}</button>`;
-const extraOf=c=>({game_changer:!!c.game_changer,layout:c.layout||null,legalities:c.legalities||null,color_identity:(c.color_identity||[]).join(''),keywords:c.keywords||(c.card_faces&&c.card_faces[0]&&c.card_faces[0].keywords)||[],oracle_text:c.oracle_text||(c.card_faces||[]).map(f=>f.oracle_text).filter(Boolean).join('\n')||null,mana_cost:c.mana_cost||(c.card_faces&&c.card_faces[0]&&c.card_faces[0].mana_cost)||''});
+const extraOf=c=>({produced_mana:c.produced_mana||(c.card_faces&&c.card_faces[0]&&c.card_faces[0].produced_mana)||[],game_changer:!!c.game_changer,layout:c.layout||null,legalities:c.legalities||null,color_identity:(c.color_identity||[]).join(''),keywords:c.keywords||(c.card_faces&&c.card_faces[0]&&c.card_faces[0].keywords)||[],oracle_text:c.oracle_text||(c.card_faces||[]).map(f=>f.oracle_text).filter(Boolean).join('\n')||null,mana_cost:c.mana_cost||(c.card_faces&&c.card_faces[0]&&c.card_faces[0].mana_cost)||''});
 const fieldsOf=c=>({name:c.name,...extraOf(c),type_line:c.type_line||c.card_faces?.[0]?.type_line||null,colors:(c.colors||c.card_faces?.[0]?.colors||[]).join(','),cmc:c.cmc,rarity:c.rarity,set_name:c.set_name,artist:c.artist||c.card_faces?.[0]?.artist||null,set_code:c.set,collector:c.collector_number,details:[c.full_art&&'full art',c.border_color=='borderless'&&'borderless',c.promo&&'promo'].filter(Boolean).join(', ')});
 async function swapScreen(e,c){scrollTo(0,0);app.innerHTML=`<div class="top"><button id="bk">Back to ${esc(c.name)}</button></div><h2>Change printing</h2><div class="mute"><b>${esc(e.name)}</b> · now ${esc(e.set_code).toUpperCase()} #${esc(e.collector)} · ${e.finish}. Pick the printing to use instead. Quantity, owned and commander settings stay as they are.</div><div id="res"><p class="mute">Loading printings…</p></div>`;
 $('bk').onclick=()=>open(c);
@@ -316,6 +321,32 @@ if(!list.length){r.innerHTML='<p class="mute">No partners found.</p>';return}
 r.innerHTML=list.map((k,i)=>`<div class="row" data-sid="${k.id}"><img class="th" loading="lazy" alt="" src="${pic(k.id)}"><div class="grow"><b>${esc(k.name)}</b><div class="mute">${esc(k.type_line)}</div></div><button data-ap="${i}">Add as partner</button></div>`).join('');
 r.querySelectorAll('[data-ap]').forEach(b=>b.onclick=async()=>{b.disabled=true;await addEntry(c,list[b.dataset.ap],'main',{is_commander:true});open(c)})};
 let t0;$('pq').oninput=()=>{clearTimeout(t0);t0=setTimeout(()=>show($('pq').value.trim()),300)};show('')}
+const MCOL={W:['White','#f3ecc2'],U:['Blue','#3b82c4'],B:['Black','#5b5560'],R:['Red','#d3402b'],G:['Green','#2e8b57'],C:['Colorless','#9aa0a6']};
+const pieSvg=(items,label)=>{const tot=items.reduce((n,x)=>n+x.v,0);if(!tot)return'<p class="mute">Nothing to show yet.</p>';
+let ang=-Math.PI/2;const R=60,cx=70,cy=70;
+const paths=items.map(x=>{if(items.length==1)return`<circle cx="${cx}" cy="${cy}" r="${R}" fill="${x.c}" stroke="currentColor" stroke-width="1"/>`;
+const a=x.v/tot*2*Math.PI,x1=cx+R*Math.cos(ang),y1=cy+R*Math.sin(ang);ang+=a;const x2=cx+R*Math.cos(ang),y2=cy+R*Math.sin(ang);
+return`<path d="M${cx} ${cy}L${x1.toFixed(2)} ${y1.toFixed(2)}A${R} ${R} 0 ${a>Math.PI?1:0} 1 ${x2.toFixed(2)} ${y2.toFixed(2)}Z" fill="${x.c}" stroke="currentColor" stroke-width="1"/>`}).join('');
+const aria=label+': '+items.map(x=>x.l+' '+x.v).join(', ');
+return`<div class="pie"><svg viewBox="0 0 140 140" width="140" height="140" role="img" aria-label="${esc(aria)}">${paths}</svg><ul class="leg">${items.map(x=>`<li><span class="sw" style="background:${x.c}"></span>${esc(x.l)} <b>${x.v}</b> <span class="mute">(${Math.round(x.v/tot*100)}%)</span></li>`).join('')}</ul></div>`};
+const barSvg=counts=>{const max=Math.max(1,...counts),bw=28,gap=12,base=118,top=22;
+const bars=counts.map((n,i)=>{const h=n/max*(base-top),x=10+i*(bw+gap);return`<rect x="${x}" y="${(base-h).toFixed(1)}" width="${bw}" height="${h.toFixed(1)}" rx="3" fill="var(--acc)" opacity=".8"/><text x="${x+bw/2}" y="${(base-h-4).toFixed(1)}" text-anchor="middle" font-size="11" fill="currentColor">${n||''}</text><text x="${x+bw/2}" y="${base+16}" text-anchor="middle" font-size="12" fill="currentColor">${i==7?'7+':i}</text>`}).join('');
+return`<svg viewBox="0 0 330 140" width="100%" role="img" aria-label="${esc('Mana curve: '+counts.map((n,i)=>(i==7?'7+':i)+' mana: '+n+' cards').join(', '))}"><line x1="6" y1="${base}" x2="324" y2="${base}" stroke="currentColor" stroke-opacity=".4"/>${bars}</svg>`};
+function statsHtml(es){const m=es.filter(e=>(e.board||'main')=='main'),q=a=>a.reduce((n,e)=>n+e.qty,0);
+const land=e=>typeOf(e).includes('Land'),nl=m.filter(e=>!land(e));
+const curve=Array(8).fill(0);nl.forEach(e=>{curve[Math.min(7,Math.floor(Number(e.cmc||0)))]+=e.qty});
+const avg=q(nl)?(nl.reduce((n,e)=>n+Number(e.cmc||0)*e.qty,0)/q(nl)).toFixed(2):'0';
+const pips={};m.forEach(e=>{(String(e.mana_cost||'').match(/\{[^}]+\}/g)||[]).forEach(s=>{s.slice(1,-1).split('/').filter(p=>p.length==1&&'WUBRGC'.includes(p)).forEach(c=>{pips[c]=(pips[c]||0)+e.qty})})});
+const prod={};m.filter(land).forEach(e=>{(e.produced_mana||[]).forEach(c=>{if(MCOL[c])prod[c]=(prod[c]||0)+e.qty})});
+const items=o=>Object.keys(MCOL).filter(c=>o[c]).map(c=>({l:MCOL[c][0],c:MCOL[c][1],v:o[c]}));
+const types={};m.forEach(e=>{const k=catOf(e);types[k]=(types[k]||0)+e.qty});
+const tmax=Math.max(1,...Object.values(types)),trow=DISP.filter(k=>types[k]).map(k=>`<div class="tr"><span>${esc(plural(k))}</span><span class="tb" style="width:${Math.round(types[k]/tmax*100)}%"></span><b>${types[k]}</b></div>`).join('');
+const miss=m.filter(e=>e.mana_cost==null||e.produced_mana==null).length;
+return`<h3>Deck stats</h3><div class="mute">Counts the main deck${m.some(e=>e.is_commander)?' and commander':''}: ${q(m)} cards.${miss?` ${miss} card${miss>1?'s are':' is'} still loading details.`:''}</div><div class="stats">
+<div class="sc"><h4>Mana curve</h4>${barSvg(curve)}<div class="mute">Nonland cards by mana value. Average mana value: <b>${avg}</b>. Lands are not counted.</div></div>
+<div class="pies"><div class="sc"><h4>Color pips in mana costs</h4>${pieSvg(items(pips),'Color pips in mana costs')}</div>
+<div class="sc"><h4>Mana your lands can produce</h4>${pieSvg(items(prod),'Mana lands can produce')}<div class="mute">Each land counts once for every color it can tap for.</div></div></div>
+<div class="sc"><h4>Card types</h4>${trow||'<p class="mute">Nothing to show yet.</p>'}</div></div>`}
 function finder(){ret=0;needOnly=false;app.innerHTML=`${tabsHtml()}<input id="fq" autocomplete="off" placeholder="Type a card name, e.g. Sol Ring" value="${esc(lastQ)}"><div id="fr"></div>`;bindTabs();
 const run=async()=>{lastQ=$('fq').value.trim();const r=$('fr');if(lastQ.length<2){r.innerHTML='<p class="mute">Type at least 2 letters to search your collections and decks.</p>';return}
 const[{data:es},{data:cs}]=await Promise.all([sb.from('entries').select('*').ilike('name','%'+lastQ.replace(/[%_]/g,'')+'%'),sb.from('collections').select('id,name,kind,thumb_id')]);
@@ -372,9 +403,10 @@ const gx=`<button role="menuitem" data-gnew="1">＋ New custom group…</button>
 const gdd=dd('Group',GLc,grp,'data-g',gx),sdd=dd('Sort',SL,srt,'data-s');
 const fdd=deck?dd('Format',Object.entries(FMT).map(([k,v])=>[k,v.n]),c.format||'commander','data-f'):'';
 const erb=deck&&F.custom?'<div><button class="sm" id="er">Edit custom rules</button></div>':'';
+const statsSec=deck&&!only?statsHtml(es):'';
 const compSec=deck&&!F.oath&&(!only||comp.length)?`<h3>Companion</h3>${wrap(comp)||'<p class="mute">No companion. <button class="sm" data-addc="">Add Companion</button></p>'}`:'';
 const sideSec=side.length?`<h3>Sideboard <span class="mute">(${side.reduce((n,e)=>n+e.qty,0)})</span></h3>${wrap(side)}`:'';
-const body=deck?`${F.cmdr&&(!only||cm.length)?`<h3>${F.oath?'Oathbreaker &amp; signature spell':'Commander'}</h3>${wrap(cm)||(F.oath?'<p class="mute">Not chosen yet. Tap “Make commander” on a card below.</p>':'<p class="mute">No commander yet. <button class="sm" data-swc="">Choose Commander</button></p>')}${F.cmdr[1]>1&&!F.oath&&cm.length==1&&!only?'<p><button class="sm" data-addp="1">Add Partner</button></p>':''}`:''}${compSec}${cats}${sideSec}`:(es.length?(grp=='none'?wrap(es):gh(es)):'<p class="mute">Empty. Use “Add card” to search by name and pick a printing.</p>');
+const body=deck?`${F.cmdr&&(!only||cm.length)?`<h3>${F.oath?'Oathbreaker &amp; signature spell':'Commander'}</h3>${wrap(cm)||(F.oath?'<p class="mute">Not chosen yet. Tap “Make commander” on a card below.</p>':'<p class="mute">No commander yet. <button class="sm" data-swc="">Choose Commander</button></p>')}${F.cmdr[1]>1&&!F.oath&&cm.length==1&&!only?'<p><button class="sm" data-addp="1">Add Partner</button></p>':''}`:''}${compSec}${cats}${sideSec}${statsSec}`:(es.length?(grp=='none'?wrap(es):gh(es)):'<p class="mute">Empty. Use “Add card” to search by name and pick a printing.</p>');
 const n=es.reduce((a,e)=>a+e.qty,0);
 const gcOn=deck&&F&&F.key=='commander';
 const gcMain=gcOn?es.filter(e=>(e.board||'main')=='main'&&e.game_changer):[];
