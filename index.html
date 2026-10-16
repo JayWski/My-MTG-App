@@ -38,6 +38,9 @@ select.sm{padding:3px 6px;font:inherit;font-size:12px;margin-top:4px;color:inher
 select.fs{padding:10px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:inherit;font:inherit;width:100%;margin:4px 0}.rl{display:block;margin:8px 0}
 .tw{position:relative;flex:none}.tw.tg{width:100%}.tw .th{display:block}
 .flip{position:absolute;left:50%;bottom:4px;transform:translateX(-50%);padding:2px 8px;font-size:12px;line-height:1.4;border-radius:12px;background:#000c;color:#fff;border:1px solid #fff9;cursor:pointer;white-space:nowrap}
+.need{color:var(--down);text-decoration:underline dotted;cursor:pointer;font-weight:600}.need[aria-pressed=true]{background:var(--line);padding:2px 8px;border-radius:6px;text-decoration:none}
+.star{border:0;padding:0 6px 0 0;background:none;font-size:20px;line-height:1;cursor:pointer;color:var(--mute);vertical-align:middle}.star.on{color:#e3b341}
+.gcb{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:10px;font-size:11px;font-weight:600;color:#1a1200;background:#e3b341;vertical-align:middle}
 </style></head><body><main id="app"></main><img id="pv" alt=""><button id="top" aria-label="Back to top" title="Back to top">↑</button>
 <script>
 const SB_URL='https://wihratryjsmcbpsistkj.supabase.co',SB_KEY='sb_publishable_6k9ibJeQe9iDIxYOCxgPPA_tJTjth8f';
@@ -48,7 +51,7 @@ const DISP=['Creature','Planeswalker','Battle','Instant','Sorcery','Artifact','E
 const catOf=e=>{const t=(e.type_line||'').split(' // ')[0].split('—')[0].trim().split(' ');return PREC.find(x=>t.includes(x))||'Other'};
 const COLN={W:'White',U:'Blue',B:'Black',R:'Red',G:'Green'},COLO=['White','Blue','Black','Red','Green','Multicolor','Colorless'],RAR=['Common','Uncommon','Rare','Mythic','Special','Bonus'];
 const GL=[['none','None'],['type','Type'],['subtype','Subtype'],['color','Color'],['mv','Mana Value'],['rarity','Rarity'],['set','Set'],['artist','Artist']];
-const SL=[['mv','Mana Value'],['az','Alphabetical'],['rarity','Rarity'],['color','Color']];
+const SL=[['mv','Mana Value'],['az','Alphabetical'],['rarity','Rarity'],['color','Color'],['phi','Price: High to Low'],['plo','Price: Low to High']];
 const FMT={
 commander:{n:'Commander / EDH',key:'commander',min:100,max:100,side:null,copies:1,cmdr:[1,2],ci:1},
 standard:{n:'Standard',key:'standard',min:60,max:null,side:15,copies:4},
@@ -143,7 +146,9 @@ const dd=(lab,items,cur,attr,extra='')=>{const nm=esc((items.find(i=>i[0]==cur)|
 const rarR=e=>{const i=['common','uncommon','rare','mythic','special','bonus'].indexOf(e.rarity);return i<0?99:i};
 const colR=e=>{const c=(e.colors||'').split(',').filter(Boolean);return c.length>1?5:c.length?'WUBRG'.indexOf(c[0]):6};
 const byName=(a,b)=>a.name.localeCompare(b.name);
-const cmpFor=()=>srt=='mv'?(a,b)=>(a.cmc==null?1e9:Number(a.cmc))-(b.cmc==null?1e9:Number(b.cmc))||byName(a,b):srt=='rarity'?(a,b)=>rarR(a)-rarR(b)||byName(a,b):srt=='color'?(a,b)=>colR(a)-colR(b)||byName(a,b):byName;
+const priceOf=e=>{const p=(window._pr||{})[e.id];return p==null?null:p};
+const pcmp=d=>(a,b)=>{const x=priceOf(a),y=priceOf(b);if(x==null&&y==null)return byName(a,b);if(x==null)return 1;if(y==null)return -1;return d*(x-y)||byName(a,b)};
+const cmpFor=()=>srt=='phi'?pcmp(-1):srt=='plo'?pcmp(1):srt=='mv'?(a,b)=>(a.cmc==null?1e9:Number(a.cmc))-(b.cmc==null?1e9:Number(b.cmc))||byName(a,b):srt=='rarity'?(a,b)=>rarR(a)-rarR(b)||byName(a,b):srt=='color'?(a,b)=>colR(a)-colR(b)||byName(a,b):byName;
 const keyOf=e=>{switch(grp){
 case'type':return plural(catOf(e));
 case'subtype':{const p=(e.type_line||'').split(' // ')[0].split('—')[1];return p&&p.trim()?p.trim():'No subtype'}
@@ -159,7 +164,7 @@ const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&g
 const $=id=>document.getElementById(id),money=n=>n==null?'–':'$'+n.toFixed(2);
 const pic=id=>`https://cards.scryfall.io/small/front/${id[0]}/${id[1]}/${id}.jpg`;
 let srt='az';try{srt=localStorage.getItem('sort')||'az'}catch{}
-let ret=0;const reopen=c=>{ret=scrollY;return open(c)};
+let ret=0,needOnly=false;const reopen=c=>{ret=scrollY;return open(c)};
 let grp='type';try{grp=localStorage.getItem('group')||'type'}catch{}
 let cur=null,tab='collection',view=matchMedia('(max-width:699px)').matches?'grid':'list';try{view=localStorage.getItem('view')||view}catch{}
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
@@ -170,9 +175,9 @@ $('up').onclick=async()=>{const{data,error}=await sb.auth.signUp({email:$('em').
 const tabsHtml=()=>`<div class="top"><h1>Card Ledger</h1><button id="out">Sign out</button></div><div class="tabs"><button data-t="collection" class="${tab=='collection'?'on':''}">Collections</button><button data-t="deck" class="${tab=='deck'?'on':''}">Decks</button><button data-t="search" class="${tab=='search'?'on':''}">Find a card</button></div>`;
 function bindTabs(){app.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{tab=b.dataset.t;home()});$('out').onclick=async()=>{await sb.auth.signOut();auth()}}
 let lastQ='';
-async function home(){cur=null;ret=0;pickedCmd=null;if(tab=='search')return finder();const deck=tab=='deck',nm=deck?'deck':'collection';
+async function home(){cur=null;ret=0;needOnly=false;pickedCmd=null;if(tab=='search')return finder();const deck=tab=='deck',nm=deck?'deck':'collection';
 const{data}=await sb.from('collections').select('*').eq('kind',tab).order('created_at');
-const rows=(data||[]).map(c=>`<div class="row">${c.thumb_id?`<img class="th" data-id="${c.id}" style="cursor:pointer" loading="lazy" alt="" src="${pic(c.thumb_id)}">`:'<div class="th"></div>'}<button class="link grow" data-id="${c.id}">${esc(c.name)}</button><button data-del="${c.id}" aria-label="Delete ${esc(c.name)}">Delete</button></div>`).join('')||`<p class="mute">No ${nm}s yet. Name your first one below.</p>`;
+const rows=[...(data||[])].sort((a,b)=>(b.favorite?1:0)-(a.favorite?1:0)).map(c=>`<div class="row">${c.thumb_id?`<img class="th" data-id="${c.id}" style="cursor:pointer" loading="lazy" alt="" src="${pic(c.thumb_id)}">`:'<div class="th"></div>'}${star('c',c.id,c.favorite)}<button class="link grow" data-id="${c.id}">${esc(c.name)}</button><button data-del="${c.id}" aria-label="Delete ${esc(c.name)}">Delete</button></div>`).join('')||`<p class="mute">No ${nm}s yet. Name your first one below.</p>`;
 app.innerHTML=`${tabsHtml()}${rows}<p><input id="nm" placeholder="${deck?'New deck, e.g. Atraxa EDH':'New collection, e.g. Trade binder'}">${deck?`<select id="nf" class="fs" aria-label="Deck format">${Object.entries(FMT).map(([k,v])=>`<option value="${k}">${v.n}</option>`).join('')}</select>`:''}</p><div id="cmw"></div><p><button class="p" id="mk">Create ${nm}</button>${deck?' <button id="imp">Import a deck</button>':''}</p>`;
 bindTabs();
 if(deck)$('imp').onclick=importScreen;
@@ -185,6 +190,7 @@ if(p)await sb.from('prices').upsert({scryfall_id:pc.id,finish:fin,snap_date:new 
 await sb.from('collections').update({thumb_id:pc.id}).eq('id',r.data.id);r.data.thumb_id=pc.id;open(r.data);return}
 home()};
 if(deck){$('nf').onchange=()=>{pickedCmd=null;cmdUI()};cmdUI()}
+app.querySelectorAll('[data-fav]').forEach(b=>b.onclick=async()=>{const id=b.dataset.fav.split(':')[1],c0=data.find(z=>z.id==id);await sb.from('collections').update({favorite:!c0.favorite}).eq('id',id);home()});
 app.querySelectorAll('[data-id]').forEach(b=>b.onclick=()=>open(data.find(c=>c.id==b.dataset.id)));
 app.querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{if(confirm(`Delete this ${nm} and its cards?`)){await sb.from('collections').delete().eq('id',b.dataset.del);home()}})}
 function importScreen(){app.innerHTML=`<div class="top"><button id="bk">Back to decks</button></div><h2>Import a deck</h2>
@@ -222,7 +228,8 @@ $('op').onclick=()=>open(col)
 }catch(e){if(col)await sb.from('collections').delete().eq('id',col.id);r.innerHTML=`<p class="down">${esc(e.message||e)}</p>`;$('go').disabled=false}}
 const DFC=l=>['transform','modal_dfc','reversible_card','double_faced_token'].includes(l);
 const thumb=(id,l,big,alt='')=>`<div class="tw${big?' tg':''}"><img class="${big?'gi':'th'}" loading="lazy" alt="${alt}" src="${big?`https://cards.scryfall.io/normal/front/${id[0]}/${id[1]}/${id}.jpg`:pic(id)}">${DFC(l)?`<button class="flip" data-flip="1" aria-label="Flip card to see the other side" title="Flip card">${big?'⟲ Flip':'⟲'}</button>`:''}</div>`;
-const extraOf=c=>({layout:c.layout||null,legalities:c.legalities||null,color_identity:(c.color_identity||[]).join(''),keywords:c.keywords||(c.card_faces&&c.card_faces[0]&&c.card_faces[0].keywords)||[],oracle_text:c.oracle_text||(c.card_faces||[]).map(f=>f.oracle_text).filter(Boolean).join('\n')||null,mana_cost:c.mana_cost||(c.card_faces&&c.card_faces[0]&&c.card_faces[0].mana_cost)||''});
+const star=(k,id,on)=>`<button class="star${on?' on':''}" data-fav="${k}:${id}" aria-pressed="${!!on}" aria-label="${on?'Remove from favorites':'Add to favorites'}" title="${on?'Favorite (tap to remove)':'Add to favorites'}">${on?'★':'☆'}</button>`;
+const extraOf=c=>({game_changer:!!c.game_changer,layout:c.layout||null,legalities:c.legalities||null,color_identity:(c.color_identity||[]).join(''),keywords:c.keywords||(c.card_faces&&c.card_faces[0]&&c.card_faces[0].keywords)||[],oracle_text:c.oracle_text||(c.card_faces||[]).map(f=>f.oracle_text).filter(Boolean).join('\n')||null,mana_cost:c.mana_cost||(c.card_faces&&c.card_faces[0]&&c.card_faces[0].mana_cost)||''});
 const fieldsOf=c=>({name:c.name,...extraOf(c),type_line:c.type_line||c.card_faces?.[0]?.type_line||null,colors:(c.colors||c.card_faces?.[0]?.colors||[]).join(','),cmc:c.cmc,rarity:c.rarity,set_name:c.set_name,artist:c.artist||c.card_faces?.[0]?.artist||null,set_code:c.set,collector:c.collector_number,details:[c.full_art&&'full art',c.border_color=='borderless'&&'borderless',c.promo&&'promo'].filter(Boolean).join(', ')});
 async function swapScreen(e,c){scrollTo(0,0);app.innerHTML=`<div class="top"><button id="bk">Back to ${esc(c.name)}</button></div><h2>Change printing</h2><div class="mute"><b>${esc(e.name)}</b> · now ${esc(e.set_code).toUpperCase()} #${esc(e.collector)} · ${e.finish}. Pick the printing to use instead. Quantity, owned and commander settings stay as they are.</div><div id="res"><p class="mute">Loading printings…</p></div>`;
 $('bk').onclick=()=>open(c);
@@ -307,7 +314,7 @@ if(!list.length){r.innerHTML='<p class="mute">No partners found.</p>';return}
 r.innerHTML=list.map((k,i)=>`<div class="row" data-sid="${k.id}"><img class="th" loading="lazy" alt="" src="${pic(k.id)}"><div class="grow"><b>${esc(k.name)}</b><div class="mute">${esc(k.type_line)}</div></div><button data-ap="${i}">Add as partner</button></div>`).join('');
 r.querySelectorAll('[data-ap]').forEach(b=>b.onclick=async()=>{b.disabled=true;await addEntry(c,list[b.dataset.ap],'main',{is_commander:true});open(c)})};
 let t0;$('pq').oninput=()=>{clearTimeout(t0);t0=setTimeout(()=>show($('pq').value.trim()),300)};show('')}
-function finder(){ret=0;app.innerHTML=`${tabsHtml()}<input id="fq" autocomplete="off" placeholder="Type a card name, e.g. Sol Ring" value="${esc(lastQ)}"><div id="fr"></div>`;bindTabs();
+function finder(){ret=0;needOnly=false;app.innerHTML=`${tabsHtml()}<input id="fq" autocomplete="off" placeholder="Type a card name, e.g. Sol Ring" value="${esc(lastQ)}"><div id="fr"></div>`;bindTabs();
 const run=async()=>{lastQ=$('fq').value.trim();const r=$('fr');if(lastQ.length<2){r.innerHTML='<p class="mute">Type at least 2 letters to search your collections and decks.</p>';return}
 const[{data:es},{data:cs}]=await Promise.all([sb.from('entries').select('*').ilike('name','%'+lastQ.replace(/[%_]/g,'')+'%'),sb.from('collections').select('id,name,kind,thumb_id')]);
 const cn=Object.fromEntries((cs||[]).map(c=>[c.id,c])),g={};(es||[]).forEach(e=>(g[e.name]??=[]).push(e));
@@ -333,9 +340,13 @@ if(dk?.length){const dn=Object.fromEntries(dk.map(d=>[d.id,d.name])),{data:de}=a
 (de||[]).forEach(x=>{(inD[x.name]??=new Set()).add(dn[x.collection_id])})}}
 const decksFor=n=>`<div class="mute">${inD[n]?'In decks: '+[...inD[n]].map(d=>esc(d)).join(', '):'Not in any deck'}</div>`;
 let total=0,need=0,needN=0,proxyN=0;
-const row=e=>{const h=H[e.scryfall_id+e.finish]||[],now=h.at(-1)?.usd,st=e.ownership||'owned',buy=deck&&st=='need';if(deck&&st=='proxy')proxyN+=e.qty;if(now){total+=now*e.qty;if(buy)need+=now*e.qty}if(buy)needN+=e.qty;
+window._pr={};es.forEach(e=>{const h=H[e.scryfall_id+e.finish]||[],now=h.length?h[h.length-1].usd:null,st=e.ownership||'owned';window._pr[e.id]=now;if(now)total+=now*e.qty;if(deck&&st=='proxy')proxyN+=e.qty;if(deck&&st=='need'){needN+=e.qty;if(now)need+=now*e.qty}});
+const only=deck&&needOnly&&needN>0;
+const src=only?es.filter(e=>(e.ownership||'owned')=='need'):es;
+const row=e=>{const h=H[e.scryfall_id+e.finish]||[],now=h.at(-1)?.usd,st=e.ownership||'owned',buy=deck&&st=='need';
 const tb=`<button class="sm" data-th="${e.id}">${c.thumb_id==e.scryfall_id?'Unset thumbnail':'Set as thumbnail'}</button>`;
 const cgn=grp.startsWith('c:')?grp.slice(2):null;
+const gcb=deck&&F&&F.key=='commander'&&e.game_changer?'<span class="gcb" title="Commander Game Changer">Game Changer</span>':'';
 const tagSel=cgn?`<select class="sm" data-tg="${e.id}" aria-label="${esc(cgn)} tag for ${esc(e.name)}"><option value="">${esc(cgn)}: (none)</option>${((c.custom_groups||{})[cgn]||[]).map(t=>`<option value="${esc(t)}"${(e.tags||{})[cgn]==t?' selected':''}>${esc(t)}</option>`).join('')}<option value="__new">＋ New tag…</option></select>`:'';
 const bdSel=deck&&e.board!='companion'?`<select class="sm" data-bd="${e.id}" aria-label="Board for ${esc(e.name)}"><option value="main">Main Deck</option><option value="side"${e.board=='side'?' selected':''}>Sideboard</option></select>`:'';
 const ownSel=deck?`<select class="sm ${st=='need'?'down':st=='proxy'?'mute':''}" data-own="${e.id}" aria-label="Ownership for ${esc(e.name)}">${[['owned','Owned'],['proxy','Proxy'],['need','Need to Buy']].map(([v,l])=>`<option value="${v}"${st==v?' selected':''}>${l}</option>`).join('')}</select>`:'';
@@ -343,35 +354,44 @@ const cmdBtn=deck&&F.oath&&(e.board||'main')=='main'?`<button class="sm" data-cm
 const swBtn=deck&&F.cmdr&&!F.oath&&e.is_commander&&(e.board||'main')=='main'?`<button class="sm" data-swc="${e.id}">Swap Commander</button>${ncm>1?` <button class="sm" data-cmd="${e.id}">Unset commander</button>`:''}`:'';
 const compBtn=deck&&e.board=='companion'?`<button class="sm" data-swcmp="${e.id}">Swap Companion</button> <button class="sm" data-rmcmp="${e.id}">Remove companion</button>`:'';
 const x=`<div>${ownSel} ${bdSel} ${cmdBtn}${swBtn}${compBtn} ${tb} <button class="sm" data-sw="${e.id}">Change printing</button> ${tagSel}</div>`;
-if(view=='grid')return`<div class="gc">${thumb(e.scryfall_id,e.layout,1,esc(e.name))}<div class="gp"><button class="pbtn" data-hist="${e.id}" aria-label="Price history for ${esc(e.name)}">${money(now)}</button> <span class="mute">${fmt(chg(h,7))||'new'} wk</span></div><div class="mute gn"><b>${esc(e.name)}</b><br>${esc(e.set_code).toUpperCase()} #${esc(e.collector)} · ${e.finish}${e.details?' · '+esc(e.details):''}</div>${x}${deck?'':decksFor(e.name)}<div class="gq"><button data-q="${e.id}:-1" aria-label="Remove one">−</button> ${e.qty} <button data-q="${e.id}:1" aria-label="Add one">+</button></div></div>`;
-return`<div class="row" data-sid="${e.scryfall_id}">${view=='text'?'':thumb(e.scryfall_id,e.layout,0)}<div class="grow"><b>${esc(e.name)}</b><div class="mute">${esc(e.set_code).toUpperCase()} #${esc(e.collector)} · ${e.finish}${e.details?' · '+esc(e.details):''}</div>${x}${deck?'':decksFor(e.name)}</div>
+if(view=='grid')return`<div class="gc">${thumb(e.scryfall_id,e.layout,1,esc(e.name))}<div class="gp"><button class="pbtn" data-hist="${e.id}" aria-label="Price history for ${esc(e.name)}">${money(now)}</button> <span class="mute">${fmt(chg(h,7))||'new'} wk</span></div><div class="mute gn">${star('e',e.id,e.favorite)}<b>${esc(e.name)}</b>${gcb}<br>${esc(e.set_code).toUpperCase()} #${esc(e.collector)} · ${e.finish}${e.details?' · '+esc(e.details):''}</div>${x}${deck?'':decksFor(e.name)}<div class="gq"><button data-q="${e.id}:-1" aria-label="Remove one">−</button> ${e.qty} <button data-q="${e.id}:1" aria-label="Add one">+</button></div></div>`;
+return`<div class="row" data-sid="${e.scryfall_id}">${view=='text'?'':thumb(e.scryfall_id,e.layout,0)}<div class="grow">${star('e',e.id,e.favorite)}<b>${esc(e.name)}</b>${gcb}<div class="mute">${esc(e.set_code).toUpperCase()} #${esc(e.collector)} · ${e.finish}${e.details?' · '+esc(e.details):''}</div>${x}${deck?'':decksFor(e.name)}</div>
 ${view=='text'?'':spark(h.map(y=>y.usd))}<div class="num"><button class="pbtn" data-hist="${e.id}" aria-label="Price history for ${esc(e.name)}">${money(now)}</button><div class="mute">${fmt(chg(h,7))||'new'} wk · ${fmt(chg(h,28))||'–'} 4wk</div></div>
 <div><button data-q="${e.id}:-1" aria-label="Remove one">−</button> ${e.qty} <button data-q="${e.id}:1" aria-label="Add one">+</button></div></div>`};
-const srtd=a=>[...a].sort(cmpFor());
+const srtd=a=>{const f=cmpFor();return[...a].sort((x,y)=>(y.favorite?1:0)-(x.favorite?1:0)||f(x,y))};
 const wrap=a=>a.length?(view=='grid'?`<div class="grid">${srtd(a).map(row).join('')}</div>`:srtd(a).map(row).join('')):'';
-const comp=es.filter(e=>e.board=='companion'),side=es.filter(e=>e.board=='side'),mainAll=deck?es.filter(e=>(e.board||'main')=='main'):es,cm=F&&F.cmdr?mainAll.filter(e=>e.is_commander):[],rest=mainAll.filter(e=>!cm.includes(e));
+const comp=src.filter(e=>e.board=='companion'),side=src.filter(e=>e.board=='side'),mainAll=deck?src.filter(e=>(e.board||'main')=='main'):es,cm=F&&F.cmdr?mainAll.filter(e=>e.is_commander):[],rest=mainAll.filter(e=>!cm.includes(e));
 const groups=a=>{const g={};a.forEach(e=>{const k=keyOf(e);(g[k]??={k,s:sortOf(e,k),a:[]}).a.push(e)});
 return Object.values(g).sort((x,y)=>typeof x.s=='number'&&typeof y.s=='number'?x.s-y.s:String(x.s).localeCompare(String(y.s)))};
 const gh=a=>groups(a).map(({k,a})=>`<h3>${esc(k)} <span class="mute">(${a.reduce((n,e)=>n+e.qty,0)})</span></h3>${wrap(a)}`).join('');
-const cats=!rest.length?'<p class="mute">No other cards yet.</p>':grp=='none'?`<h3>Main deck</h3>${wrap(rest)}`:gh(rest);
+const cats=!rest.length?(only?'':'<p class="mute">No other cards yet.</p>'):grp=='none'?`<h3>Main deck</h3>${wrap(rest)}`:gh(rest);
 const GLc=GL.concat(customs.map(n=>['c:'+n,n]));
 const gx=`<button role="menuitem" data-gnew="1">＋ New custom group…</button>${customs.length?'<button role="menuitem" data-gman="1">Manage custom groups</button>':''}`;
 const gdd=dd('Group',GLc,grp,'data-g',gx),sdd=dd('Sort',SL,srt,'data-s');
 const fdd=deck?dd('Format',Object.entries(FMT).map(([k,v])=>[k,v.n]),c.format||'commander','data-f'):'';
 const erb=deck&&F.custom?'<div><button class="sm" id="er">Edit custom rules</button></div>':'';
-const compSec=deck&&!F.oath?`<h3>Companion</h3>${wrap(comp)||'<p class="mute">No companion. <button class="sm" data-addc="">Add Companion</button></p>'}`:'';
+const compSec=deck&&!F.oath&&(!only||comp.length)?`<h3>Companion</h3>${wrap(comp)||'<p class="mute">No companion. <button class="sm" data-addc="">Add Companion</button></p>'}`:'';
 const sideSec=side.length?`<h3>Sideboard <span class="mute">(${side.reduce((n,e)=>n+e.qty,0)})</span></h3>${wrap(side)}`:'';
-const body=deck?`${F.cmdr?`<h3>${F.oath?'Oathbreaker &amp; signature spell':'Commander'}</h3>${wrap(cm)||(F.oath?'<p class="mute">Not chosen yet. Tap “Make commander” on a card below.</p>':'<p class="mute">No commander yet. <button class="sm" data-swc="">Choose Commander</button></p>')}${F.cmdr[1]>1&&!F.oath&&cm.length==1?'<p><button class="sm" data-addp="1">Add Partner</button></p>':''}`:''}${compSec}${cats}${sideSec}`:(es.length?(grp=='none'?wrap(es):gh(es)):'<p class="mute">Empty. Use “Add card” to search by name and pick a printing.</p>');
+const body=deck?`${F.cmdr&&(!only||cm.length)?`<h3>${F.oath?'Oathbreaker &amp; signature spell':'Commander'}</h3>${wrap(cm)||(F.oath?'<p class="mute">Not chosen yet. Tap “Make commander” on a card below.</p>':'<p class="mute">No commander yet. <button class="sm" data-swc="">Choose Commander</button></p>')}${F.cmdr[1]>1&&!F.oath&&cm.length==1&&!only?'<p><button class="sm" data-addp="1">Add Partner</button></p>':''}`:''}${compSec}${cats}${sideSec}`:(es.length?(grp=='none'?wrap(es):gh(es)):'<p class="mute">Empty. Use “Add card” to search by name and pick a printing.</p>');
 const n=es.reduce((a,e)=>a+e.qty,0);
-const vp=V?`<div class="vp" role="status"><div class="mute">${ruleText(F)}</div>${V.out.length?V.out.map(([l,t])=>`<div class="${l=='err'?'down':'warn'}">${l=='err'?'✖':'⚠'} ${t}</div>`).join(''):`<div class="up">✓ Legal for ${esc(F.n)}</div>`}${V.notes.map(t=>`<div class="up">${t}</div>`).join('')}</div>`:'';
+const gcOn=deck&&F&&F.key=='commander';
+const gcMain=gcOn?es.filter(e=>(e.board||'main')=='main'&&e.game_changer):[];
+const gcUnk=gcOn?es.filter(e=>(e.board||'main')=='main'&&e.game_changer==null).length:0;
+const gcLine=gcOn?`<div class="mute">Game Changers: ${gcMain.length?`<b>${gcMain.reduce((n,e)=>n+e.qty,0)}</b> (${gcMain.map(e=>esc(e.name)).join(', ')}). Under the Commander Brackets, Brackets 1 and 2 allow none and Bracket 3 allows up to 3.`:'none.'}${gcUnk?` ${gcUnk} card${gcUnk>1?'s are':' is'} still loading.`:''}</div>`:'';
+const vp=V?`<div class="vp" role="status"><div class="mute">${ruleText(F)}</div>${gcLine}${V.out.length?V.out.map(([l,t])=>`<div class="${l=='err'?'down':'warn'}">${l=='err'?'✖':'⚠'} ${t}</div>`).join(''):`<div class="up">✓ Legal for ${esc(F.n)}</div>`}${V.notes.map(t=>`<div class="up">${t}</div>`).join('')}</div>`:'';
 const okc=V?(V.out.some(z=>z[0]=='err')?'down':(F.max!=null?V.mn==F.max:F.min!=null?V.mn>=F.min:true)?'up':''):'';
-const info=deck?`<div class="mute"><b class="${okc}">${V.mn}${F.max!=null?' / '+F.max:F.min!=null?' (min '+F.min+')':''} main deck cards</b>${F.side!=null||V.sn?` · Sideboard ${V.sn}${F.side!=null?' / '+F.side:''}`:''}</div><div class="mute">${needN?`Still need ${needN} card${needN>1?'s':''} · ${money(need)} to buy`:'You have every card in this deck'}${proxyN?` · ${proxyN} proxy card${proxyN>1?'s':''}`:''}</div>${vp}`:`<div class="mute">${n} cards, latest prices</div>`;
-app.innerHTML=`<div class="top"><button id="bk">Back to ${deck?'decks':'collections'}</button><button class="p" id="ad">Add card</button></div><h2>${esc(c.name)}</h2><div class="total">${money(total)}</div>${info}${fdd}${dd('Display',[['list','List'],['grid','Grid'],['text','Text only']],view,'data-v')}${gdd}${sdd}${erb}${body}`;
+const info=deck?`<div class="mute"><b class="${okc}">${V.mn}${F.max!=null?' / '+F.max:F.min!=null?' (min '+F.min+')':''} main deck cards</b>${F.side!=null||V.sn?` · Sideboard ${V.sn}${F.side!=null?' / '+F.side:''}`:''}</div><div class="mute">${needN?`<button class="link need" data-needf="1" aria-pressed="${only}">${only?`Showing only the ${needN} card${needN>1?'s':''} you need to buy · ${money(need)}. Tap to show all`:`Still need ${needN} card${needN>1?'s':''} · ${money(need)} to buy. Tap to show only these`}</button>`:'You have every card in this deck'}${proxyN?` · ${proxyN} proxy card${proxyN>1?'s':''}`:''}</div>${vp}`:`<div class="mute">${n} cards, latest prices</div>`;
+app.innerHTML=`<div class="top"><button id="bk">Back to ${deck?'decks':'collections'}</button><button class="p" id="ad">Add card</button></div><h2>${star('c',c.id,c.favorite)}${esc(c.name)}</h2><div class="total">${money(total)}</div>${info}${fdd}${dd('Display',[['list','List'],['grid','Grid'],['text','Text only']],view,'data-v')}${gdd}${sdd}${erb}${body}`;
 if(ret){const y=ret;ret=0;requestAnimationFrame(()=>scrollTo(0,y))}else scrollTo(0,0);
 app.querySelectorAll('[data-hist]').forEach(b=>b.onclick=()=>{const e=es.find(x=>x.id==b.dataset.hist);showHist(e,H[e.scryfall_id+e.finish]||[])});
 app.querySelectorAll('[data-swc]').forEach(b=>b.onclick=()=>cmdPicker(c,es,F,b.dataset.swc||null));
 app.querySelectorAll('[data-addc],[data-swcmp]').forEach(b=>b.onclick=()=>{ret=scrollY;compScreen(c,es,F)});
 app.querySelectorAll('[data-rmcmp]').forEach(b=>b.onclick=async()=>{if(confirm('Remove this companion?')){await sb.from('entries').delete().eq('id',b.dataset.rmcmp);reopen(c)}});
+app.querySelectorAll('[data-fav]').forEach(b=>b.onclick=async()=>{const[k,id]=b.dataset.fav.split(':');
+if(k=='c'){c.favorite=!c.favorite;await sb.from('collections').update({favorite:c.favorite}).eq('id',c.id)}
+else{const e=es.find(z=>z.id==id);await sb.from('entries').update({favorite:!e.favorite}).eq('id',id)}
+reopen(c)});
+app.querySelectorAll('[data-needf]').forEach(b=>b.onclick=()=>{needOnly=!needOnly;open(c)});
 app.querySelectorAll('[data-addp]').forEach(b=>b.onclick=()=>{ret=scrollY;partnerScreen(c,es,F)});
 app.querySelectorAll('[data-bd]').forEach(b=>b.onchange=async()=>{const e=es.find(z=>z.id==b.dataset.bd),u={board:b.value};if(b.value=='side')u.is_commander=false;await sb.from('entries').update(u).eq('id',e.id);reopen(c)});
 app.querySelectorAll('[data-tg]').forEach(b=>b.onchange=async()=>{const e=es.find(z=>z.id==b.dataset.tg),n=grp.slice(2);let v=b.value;
