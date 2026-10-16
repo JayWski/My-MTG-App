@@ -41,6 +41,8 @@ select.fs{padding:10px;border:1px solid var(--line);border-radius:6px;background
 .need{color:var(--down);text-decoration:underline dotted;cursor:pointer;font-weight:600}.need[aria-pressed=true]{background:var(--line);padding:2px 8px;border-radius:6px;text-decoration:none}
 .star{border:0;padding:0 6px 0 0;background:none;font-size:20px;line-height:1;cursor:pointer;color:var(--mute);vertical-align:middle}.star.on{color:#e3b341}
 .gcb{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:10px;font-size:11px;font-weight:600;color:#1a1200;background:#e3b341;vertical-align:middle}
+.setm{max-height:55vh;overflow:auto;min-width:260px;max-width:92vw}.ck{display:flex;gap:8px;align-items:center;padding:8px 10px;cursor:pointer}.ck input{width:auto;margin:0;padding:0}
+button[data-a][aria-pressed=true]{background:var(--acc);color:var(--bg)}
 </style></head><body><main id="app"></main><img id="pv" alt=""><button id="top" aria-label="Back to top" title="Back to top">↑</button>
 <script>
 const SB_URL='https://wihratryjsmcbpsistkj.supabase.co',SB_KEY='sb_publishable_6k9ibJeQe9iDIxYOCxgPPA_tJTjth8f';
@@ -237,10 +239,10 @@ let url=`https://api.scryfall.com/cards/search?unique=prints&order=released&incl
 for(let i=0;url&&i<5;i++){const r=await fetch(url);if(!r.ok)break;const j=await r.json();cards.push(...j.data);url=j.has_more?j.next_page:null}
 const res=$('res');if(!cards.length){res.innerHTML='<p class="down">Could not load printings for this card. Please try again later.</p>';return}
 window._s=cards;
-res.innerHTML=cards.map((k,i)=>{const d=[k.full_art&&'full art',k.border_color=='borderless'&&'borderless',k.promo&&'promo',...(k.frame_effects||[])].filter(Boolean).join(', ');
+const rowFn=(k,i)=>{const d=[k.full_art&&'full art',k.border_color=='borderless'&&'borderless',k.promo&&'promo',...(k.frame_effects||[])].filter(Boolean).join(', ');
 return`<div class="row" data-sid="${k.id}"><img class="th" loading="lazy" alt="" src="${pic(k.id)}"><div class="grow"><b>${esc(k.set_name)}</b><div class="mute">${k.set.toUpperCase()} #${esc(k.collector_number)}${d?' · '+esc(d):''}</div></div>
-${k.finishes.map(f=>{const cur=k.id==e.scryfall_id&&f==e.finish;return`<button data-a="${i}:${f}" ${cur?'disabled':''}>${cur?'✓ current':f+' '+money(+k.prices[COL[f]]||null)}</button>`}).join(' ')}</div>`}).join('');
-res.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>doSwap(e,c,b))}
+${k.finishes.map(f=>{const cur=k.id==e.scryfall_id&&f==e.finish;return`<button data-a="${i}:${f}" ${cur?'disabled':''}>${cur?'✓ current':f+' '+money(+k.prices[COL[f]]||null)}</button>`}).join(' ')}</div>`};
+showPrintings(res,cards,rowFn,l=>l.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>doSwap(e,c,b)))}
 async function doSwap(e,c,b){const[i,f]=b.dataset.a.split(':'),k=window._s[i];document.querySelectorAll('[data-a]').forEach(x=>x.disabled=true);
 const ex=await sb.from('entries').select('id,qty,is_commander').eq('collection_id',c.id).eq('scryfall_id',k.id).eq('finish',f).eq('board',e.board||'main').neq('id',e.id);
 if(ex.data?.length){const t=ex.data[0];await sb.from('entries').update({qty:t.qty+e.qty,is_commander:t.is_commander||e.is_commander}).eq('id',t.id);await sb.from('entries').delete().eq('id',e.id)}
@@ -422,24 +424,44 @@ document.body.appendChild(m);
 const close=()=>{m.remove();document.removeEventListener('keydown',onKey)},onKey=ev=>{if(ev.key=='Escape')close()};
 document.addEventListener('keydown',onKey);m.onclick=ev=>{if(ev.target==m)close()};$('hx').onclick=close;$('hx').focus();
 $('hcsv').onclick=()=>{const csv='Date,Price (USD)\n'+h.map(x=>x.d+','+x.usd.toFixed(2)).join('\n'),a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download=(e.name+' '+e.set_code+' '+e.finish+' prices.csv').replace(/[^\w. -]/g,'');a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}}
-function search(){scrollTo(0,0);app.innerHTML=`<div class="top"><button id="bk">Back to ${esc(cur.name)}</button></div><h2>Add a card</h2>${cur.kind=='deck'?'<label><input type="checkbox" id="own" checked style="width:auto;margin:0 6px 0 0">I own these cards</label> <label style="margin-left:12px">Add to <select id="ab" class="sm"><option value="main">Main Deck</option><option value="side">Sideboard</option></select></label>':''}<input id="q" autocomplete="off" placeholder="Exact card name, e.g. Sol Ring"><button class="p" id="go">Find printings</button><div id="res"></div>`;
+function showPrintings(res,cards,rowFn,bindFn){
+const m=new Map();cards.forEach(k=>{if(!m.has(k.set))m.set(k.set,{n:k.set_name,d:k.released_at||''})});
+const sets=[...m.entries()].sort((a,b)=>b[1].d.localeCompare(a[1].d)),sel=new Set();
+res.innerHTML=`<div class="dg"><span class="dl">Sets:</span><div class="dd"><button aria-haspopup="true" aria-expanded="false"></button><div class="ddm setm" role="group" aria-label="Choose sets" hidden><button class="sm" data-stclear="1">Show all sets</button>${sets.map(([cd,o])=>`<label class="ck"><input type="checkbox" data-st="${esc(cd)}"> ${esc(o.n)} (${esc(cd.toUpperCase())})</label>`).join('')}</div></div><span class="mute" data-cnt></span></div><div class="rl"></div>`;
+const btn=res.querySelector('.dd>button'),menu=res.querySelector('.ddm'),list=res.querySelector('.rl'),cnt=res.querySelector('[data-cnt]');
+const draw=()=>{const vis=cards.map((k,i)=>[k,i]).filter(([k])=>!sel.size||sel.has(k.set));
+list.innerHTML=vis.map(([k,i])=>rowFn(k,i)).join('')||'<p class="mute">No printings in the chosen sets.</p>';
+const nm=sel.size==0?'All sets':sel.size==1?esc(m.get([...sel][0]).n):sel.size+' sets';
+btn.innerHTML=nm+' ▾';cnt.textContent=vis.length+' of '+cards.length+' printings';bindFn(list)};
+btn.onclick=()=>{menu.hidden=!menu.hidden;btn.setAttribute('aria-expanded',String(!menu.hidden))};
+menu.querySelectorAll('[data-st]').forEach(i=>i.onchange=()=>{if(i.checked)sel.add(i.dataset.st);else sel.delete(i.dataset.st);draw()});
+menu.querySelector('[data-stclear]').onclick=()=>{sel.clear();menu.querySelectorAll('[data-st]').forEach(i=>i.checked=false);draw()};
+draw()}
+function search(){scrollTo(0,0);window._added={};app.innerHTML=`<div class="top"><button id="bk">Back to ${esc(cur.name)}</button></div><h2>Add a card</h2>${cur.kind=='deck'?'<label><input type="checkbox" id="own" checked style="width:auto;margin:0 6px 0 0">I own these cards</label> <label style="margin-left:12px">Add to <select id="ab" class="sm"><option value="main">Main Deck</option><option value="side">Sideboard</option></select></label>':''}<input id="q" autocomplete="off" placeholder="Exact card name, e.g. Sol Ring"><button class="p" id="go">Find printings</button><div id="res"></div>`;
 $('bk').onclick=()=>open(cur);$('go').onclick=find;$('q').onkeydown=e=>{if(e.key=='Enter')find()}}
 async function find(){const n=$('q').value.trim(),res=$('res');if(!n)return;res.innerHTML='<p class="mute">Searching…</p>';
 const url=q=>`https://api.scryfall.com/cards/search?unique=prints&order=released&include_extras=true&q=${encodeURIComponent(q)}`;
 let r=await fetch(url(`!"${n}"`));if(!r.ok)r=await fetch(url(n));
 if(!r.ok){res.innerHTML='<p class="down">No cards found. Check the spelling and try again.</p>';return}
 const cards=(await r.json()).data;window._c=cards;
-res.innerHTML=cards.map((c,i)=>{const d=[c.full_art&&'full art',c.border_color=='borderless'&&'borderless',c.promo&&'promo',...(c.frame_effects||[])].filter(Boolean).join(', ');
+const rowFn=(c,i)=>{const d=[c.full_art&&'full art',c.border_color=='borderless'&&'borderless',c.promo&&'promo',...(c.frame_effects||[])].filter(Boolean).join(', ');
 return`<div class="row" data-sid="${c.id}">${thumb(c.id,c.layout,0)}<div class="grow"><b>${esc(c.name)}</b><div class="mute">${esc(c.set_name)} (${c.set.toUpperCase()}) #${esc(c.collector_number)}${d?' · '+esc(d):''}</div></div>
-${c.finishes.map(f=>`<button data-a="${i}:${f}">${f} ${money(+c.prices[COL[f]]||null)}</button>`).join(' ')}</div>`}).join('');
-res.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>add(b))}
-async function add(b){const[i,f]=b.dataset.a.split(':'),c=window._c[i];b.disabled=true;const bd=$('ab')?$('ab').value:'main';
+${c.finishes.map(f=>{const on=(window._added||{})[c.id+'|'+f];return`<button data-a="${i}:${f}" aria-pressed="${!!on}">${on?'✓ Added · tap to remove':f+' '+money(+c.prices[COL[f]]||null)}</button>`}).join(' ')}</div>`};
+showPrintings(res,cards,rowFn,l=>l.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>add(b)))}
+async function add(b){const[i,f]=b.dataset.a.split(':'),c=window._c[i],key=c.id+'|'+f;window._added=window._added||{};b.disabled=true;
+if(window._added[key]){const id=window._added[key].id;
+const r0=await sb.from('entries').select('qty').eq('id',id);
+if(r0.data&&r0.data.length){if(r0.data[0].qty>1)await sb.from('entries').update({qty:r0.data[0].qty-1}).eq('id',id);else await sb.from('entries').delete().eq('id',id)}
+delete window._added[key]}
+else{const bd=$('ab')?$('ab').value:'main';
 const{data:ex}=await sb.from('entries').select('id,qty').eq('collection_id',cur.id).eq('scryfall_id',c.id).eq('finish',f).eq('board',bd);
-if(ex?.length)await sb.from('entries').update({qty:ex[0].qty+1}).eq('id',ex[0].id);
-else await sb.from('entries').insert({collection_id:cur.id,scryfall_id:c.id,finish:f,board:bd,...extraOf(c),ownership:$('own')&&!$('own').checked?'need':'owned',name:c.name,type_line:c.type_line||c.card_faces?.[0]?.type_line||null,colors:(c.colors||c.card_faces?.[0]?.colors||[]).join(','),cmc:c.cmc,rarity:c.rarity,set_name:c.set_name,artist:c.artist||c.card_faces?.[0]?.artist||null,set_code:c.set,collector:c.collector_number,
-details:[c.full_art&&'full art',c.border_color=='borderless'&&'borderless',c.promo&&'promo'].filter(Boolean).join(', ')});
-const p=+c.prices[COL[f]];if(p)await sb.from('prices').upsert({scryfall_id:c.id,finish:f,snap_date:new Date().toLocaleDateString('en-CA',{timeZone:'America/New_York'}),usd:p},{ignoreDuplicates:true});
-b.textContent='Added ✓'}
+let id;
+if(ex&&ex.length){await sb.from('entries').update({qty:ex[0].qty+1}).eq('id',ex[0].id);id=ex[0].id}
+else{const ins=await sb.from('entries').insert({collection_id:cur.id,scryfall_id:c.id,finish:f,board:bd,...extraOf(c),ownership:$('own')&&!$('own').checked?'need':'owned',name:c.name,type_line:c.type_line||c.card_faces?.[0]?.type_line||null,colors:(c.colors||c.card_faces?.[0]?.colors||[]).join(','),cmc:c.cmc,rarity:c.rarity,set_name:c.set_name,artist:c.artist||c.card_faces?.[0]?.artist||null,set_code:c.set,collector:c.collector_number,
+details:[c.full_art&&'full art',c.border_color=='borderless'&&'borderless',c.promo&&'promo'].filter(Boolean).join(', ')}).select('id');id=ins.data&&ins.data[0]&&ins.data[0].id}
+window._added[key]={id};
+const p=+c.prices[COL[f]];if(p)await sb.from('prices').upsert({scryfall_id:c.id,finish:f,snap_date:new Date().toLocaleDateString('en-CA',{timeZone:'America/New_York'}),usd:p},{ignoreDuplicates:true})}
+const on=!!window._added[key];b.disabled=false;b.setAttribute('aria-pressed',String(on));b.textContent=on?'✓ Added · tap to remove':f+' '+money(+c.prices[COL[f]]||null)}
 const pv=document.getElementById('pv'),big=id=>`https://cards.scryfall.io/normal/front/${id[0]}/${id[1]}/${id}.jpg`;
 const place=e=>{pv.style.left=Math.min(e.clientX+20,innerWidth-264)+'px';pv.style.top=Math.max(8,Math.min(e.clientY-170,innerHeight-350))+'px'};
 const pvShow=e=>{const t=e.target.closest('.th,.gi,[data-sid] b'),r=t&&t.closest('[data-sid]');if(r){pv.src=big(r.dataset.sid);place(e);pv.style.display='block'}else pv.style.display='none'};
