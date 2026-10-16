@@ -71,11 +71,41 @@ if(F.cmdr)p.push(F.cmdr[0]==F.cmdr[1]?(F.cmdr[0]==2?'Oathbreaker + signature spe
 if(F.ci)p.push('color identity');
 return `${esc(F.n)}: ${p.join(', ')}.${F.note?' '+esc(F.note):''}`};
 const cn=n=>{const p=String(n).split(' // ');return p.length==2&&p[0]==p[1]?p[0]:n};
-function validate(c,es){const F=fmtOf(c),out=[],q=a=>a.reduce((n,e)=>n+e.qty,0);
-const main=es.filter(e=>e.board!='side'),side=es.filter(e=>e.board=='side'),mn=q(main),sn=q(side);
+const typeOf=e=>(e.type_line||'').split(' // ')[0];
+const mv=e=>Number(e.cmc||0);
+const PERM=t=>/Artifact|Creature|Enchantment|Land|Planeswalker|Battle/.test(t);
+const frontN=n=>String(n).split(' // ')[0].toLowerCase();
+const pk=e=>{const kw=e.keywords||[],t=typeOf(e),pw=((e.oracle_text||'').match(/Partner with ([^\n(]+)/)||[])[1];
+return{pwith:pw?pw.trim():null,partner:kw.includes('Partner')&&!pw,friends:kw.includes('Friends forever'),bgc:kw.includes('Choose a Background'),bg:t.includes('Background'),doc:t.includes('Time Lord')&&t.includes('Doctor'),dc:kw.includes("Doctor's companion")}};
+const compat=(a,b)=>{const x=pk(a),y=pk(b);return!!((x.partner&&y.partner)||(x.pwith&&y.pwith&&frontN(x.pwith)==frontN(b.name)&&frontN(y.pwith)==frontN(a.name))||(x.friends&&y.friends)||(x.bgc&&y.bg)||(x.bg&&y.bgc)||(x.dc&&y.doc)||(x.doc&&y.dc))};
+const ACT=['Equip','Crew','Fortify','Reconfigure','Level up','Outlast','Monstrosity','Cycling','Landcycling','Basic landcycling','Channel','Transmute','Ninjutsu','Morph','Megamorph','Unearth','Embalm','Eternalize','Bloodrush','Scavenge','Adapt','Transfigure','Boast'];
+const hasAct=e=>{const t=typeOf(e);if(t.includes('Basic'))return true;if((e.keywords||[]).some(k=>ACT.includes(k)))return true;return(e.oracle_text||'').replace(/\([^)]*\)/g,'').includes(':')};
+const CMP={
+'gyruda, doom of depths':{r:'every card must have an even mana value',bad:d=>d.filter(e=>mv(e)%2!=0)},
+'jegantha, the wellspring':{r:'no card may have more than one mana symbol in its mana cost',bad:d=>d.filter(e=>((e.mana_cost||'').match(/\{[^}]+\}/g)||[]).length>1)},
+'kaheera, the orphanguard':{r:'every creature card must be a Cat, Elemental, Nightmare, Dinosaur or Beast',bad:d=>d.filter(e=>{const t=typeOf(e);if(!t.includes('Creature'))return false;return!/\b(Cat|Elemental|Nightmare|Dinosaur|Beast)\b/.test(t.split('—')[1]||'')&&!(e.keywords||[]).includes('Changeling')})},
+'keruga, the macrosage':{r:'every nonland card must have mana value 3 or more',bad:d=>d.filter(e=>!typeOf(e).includes('Land')&&mv(e)<3)},
+'lurrus of the dream-den':{r:'every permanent card must have mana value 2 or less',bad:d=>d.filter(e=>PERM(typeOf(e))&&mv(e)>2)},
+'lutri, the spellchaser':{r:'no nonland card may appear more than once',bad:d=>{const c={};d.forEach(e=>{if(!typeOf(e).includes('Land'))c[cn(e.name)]=(c[cn(e.name)]||0)+e.qty});return d.filter((e,i)=>!typeOf(e).includes('Land')&&c[cn(e.name)]>1&&d.findIndex(z=>cn(z.name)==cn(e.name))==i)}},
+'obosh, the preypiercer':{r:'every nonland permanent card must have an odd mana value (lands are not counted)',bad:d=>d.filter(e=>PERM(typeOf(e))&&!typeOf(e).includes('Land')&&mv(e)%2==0)},
+'umori, the collector':{r:'every nonland card must share a card type',bad:d=>{const nl=d.filter(e=>!typeOf(e).includes('Land')),T=['Artifact','Creature','Enchantment','Instant','Sorcery','Planeswalker','Battle'];let best=null,bn=-1;T.forEach(t=>{const n=nl.filter(e=>typeOf(e).split('—')[0].includes(t)).length;if(n>bn){bn=n;best=t}});return nl.filter(e=>!typeOf(e).split('—')[0].includes(best))}},
+'zirda, the dawnwaker':{r:'every permanent card must have an activated ability',approx:1,bad:d=>d.filter(e=>PERM(typeOf(e))&&!hasAct(e))}};
+function checkCompanion(k,deck,F,mn){
+if(!k.keywords)return{ok:false,unknown:true,msg:'Its details have not loaded yet. They fill in overnight.'};
+if(!k.keywords.includes('Companion'))return{ok:false,msg:'This card does not have the Companion ability.'};
+const key=frontN(k.name);
+if(key=='yorion, sky nomad'){if(F.max!=null)return{ok:false,msg:'Yorion needs a deck at least 20 cards over the minimum, and this format has a fixed deck size.'};
+if(F.min!=null&&mn<F.min+20)return{ok:false,msg:`Yorion needs at least ${F.min+20} cards in the main deck, and you have ${mn}.`};return{ok:true}}
+const R=CMP[key];if(!R)return{ok:false,unknown:true,msg:'This companion rule cannot be checked automatically.'};
+const bad=R.bad(deck);if(!bad.length)return{ok:true,approx:R.approx};
+const nm=[...new Set(bad.map(e=>e.name))];
+return{ok:false,approx:R.approx,msg:`Rule: ${R.r}. ${nm.length} ${nm.length>1?'cards do not qualify':'card does not qualify'}: ${nm.slice(0,12).join(', ')}${nm.length>12?` and ${nm.length-12} more`:''}.`}}
+function validate(c,es){const F=fmtOf(c),out=[],notes=[],q=a=>a.reduce((n,e)=>n+e.qty,0);
+const main=es.filter(e=>(e.board||'main')=='main'),side=es.filter(e=>e.board=='side'),comp=es.filter(e=>e.board=='companion'),mn=q(main),sn=q(side);
 if(F.max!=null&&mn>F.max)out.push(['err',`<b>Too many cards:</b> ${mn} / ${F.max} in the main deck (${mn-F.max} over).`]);
 else if(F.min!=null&&mn<F.min)out.push(['warn',`${F.min-mn} more card${F.min-mn>1?'s':''} needed: ${mn} / ${F.min} in the main deck.`]);
-if(F.side!=null&&sn>F.side)out.push(['err',`<b>Sideboard too big:</b> ${sn} cards, limit ${F.side} (${sn-F.side} over).`]);
+const sc=sn+(F.cmdr?0:comp.length);
+if(F.side!=null&&sc>F.side)out.push(['err',`<b>Sideboard too big:</b> ${sc} cards${comp.length&&!F.cmdr?' (the companion counts toward it)':''}, limit ${F.side} (${sc-F.side} over).`]);
 const nm=a=>[...new Set(a)].map(esc).join(', ');
 if(F.key){const bad={banned:[],not_legal:[],restricted:[]};let unk=0;
 es.forEach(e=>{if(!e.legalities){unk++;return}const st=e.legalities[F.key];if(st=='banned')bad.banned.push(e.name);else if(st=='not_legal')bad.not_legal.push(e.name);else if(st=='restricted'&&F.restr)bad.restricted.push(e.name)});
@@ -92,11 +122,21 @@ if(F.cmdr){const cm=main.filter(e=>e.is_commander),k=q(cm);
 if(k<F.cmdr[0])out.push(['warn',F.oath?'Choose your Oathbreaker (a planeswalker) and signature spell (an instant or sorcery) with Make commander.':'Choose your commander with the Choose Commander button in the Commander section.']);
 else if(k>F.cmdr[1])out.push(['err',`<b>Too many commanders:</b> ${k} (max ${F.cmdr[1]}).`]);
 if(F.oath&&cm.length){const pw=cm.some(e=>(e.type_line||'').includes('Planeswalker')),sp=cm.some(e=>/Instant|Sorcery/.test(e.type_line||''));if(!pw||!sp)out.push(['err','<b>Oathbreaker needs</b> one planeswalker and one signature spell (instant or sorcery).'])}
+if(!F.oath&&cm.length==2&&k==2){const a=cm[0],b=cm[1];
+if(!a.keywords||!b.keywords)out.push(['warn','Partner details have not loaded yet. They fill in overnight.']);
+else if(!compat(a,b))out.push(['err',`<b>These two commanders cannot be partners:</b> ${nm([a.name,b.name])}. A pair needs Partner on both, matching Partner with cards, Friends forever on both, Choose a Background plus a Background, or Doctor's companion plus a Time Lord Doctor.`])}
+if(!F.oath&&cm.length==1&&k==1&&cm[0].keywords&&pk(cm[0]).bg)out.push(['err',`<b>${esc(cm[0].name)} is a Background.</b> It needs a creature with Choose a Background as the other commander.`]);
 const src=F.oath?cm.filter(e=>(e.type_line||'').includes('Planeswalker')):cm;
 if(F.ci&&src.length){const id=new Set(src.flatMap(e=>(e.color_identity||'').split('')));
 const bad=es.filter(e=>e.color_identity!=null&&e.color_identity.split('').some(l=>l&&!id.has(l)));
 if(bad.length)out.push(['err',`<b>Outside your commander's color identity:</b> ${nm(bad.map(e=>e.name))}`])}}
-return{out,mn,sn,F}}
+if(comp.length>1)out.push(['err',`<b>Only one companion is allowed:</b> ${nm(comp.map(e=>e.name))}`]);
+else if(comp.length==1){const k=comp[0],r=checkCompanion(k,main,F,mn);
+if(r.unknown)out.push(['warn',`<b>Companion ${esc(k.name)}:</b> ${esc(r.msg)}`]);
+else if(!r.ok)out.push(['err',`<b>Companion ${esc(k.name)} is not allowed:</b> ${esc(r.msg)}${r.approx?' (checked automatically, so please double-check)':''}`]);
+else notes.push(`✓ Companion ${esc(k.name)}: its deck rule is met${r.approx?' (checked automatically, so please double-check)':''}.`);
+if(F.cmdr&&F.ci){const cmd=main.filter(e=>e.is_commander);if(cmd.length&&k.color_identity!=null){const id=new Set(cmd.flatMap(e=>(e.color_identity||'').split('')));if(k.color_identity.split('').some(l=>l&&!id.has(l)))out.push(['err',`<b>Companion ${esc(k.name)}</b> is outside your commander's color identity.`])}}}
+return{out,notes,mn,sn,F}}
 const dd=(lab,items,cur,attr,extra='')=>{const nm=esc((items.find(i=>i[0]==cur)||['',''])[1]);return`<span class="dg"><span class="dl">${lab}:</span><div class="dd"><button aria-haspopup="true" aria-expanded="false" aria-label="${lab}: ${nm}">${nm} ▾</button><div class="ddm" role="menu" hidden>${items.map(([v,l])=>`<button role="menuitemradio" aria-checked="${cur==v}" ${attr}="${v}">${cur==v?'✓ ':''}${l}</button>`).join('')}${extra}</div></div></span>`};
 const rarR=e=>{const i=['common','uncommon','rare','mythic','special','bonus'].indexOf(e.rarity);return i<0?99:i};
 const colR=e=>{const c=(e.colors||'').split(',').filter(Boolean);return c.length>1?5:c.length?'WUBRG'.indexOf(c[0]):6};
@@ -172,12 +212,14 @@ for(let i=0;i<rows.length;i+=100){const e=await sb.from('entries').insert(rows.s
 const day=new Date().toLocaleDateString('en-CA',{timeZone:'America/New_York'}),pm={};
 L.forEach(({x})=>{if(x.c.price)pm[x.c.id+x.finish]={scryfall_id:x.c.id,finish:x.finish,snap_date:day,usd:x.c.price}});
 if(Object.keys(pm).length)await sb.from('prices').upsert(Object.values(pm),{ignoreDuplicates:true,onConflict:'scryfall_id,finish,snap_date'});
+fetch(SB_URL+'/functions/v1/bright-worker?force=1',{method:'POST'}).catch(()=>{});
 const cmd=rows.find(x=>x.is_commander);if(cmd){await sb.from('collections').update({thumb_id:cmd.scryfall_id}).eq('id',col.id);col.thumb_id=cmd.scryfall_id}
 const n=rows.reduce((a,x)=>a+x.qty,0);
 r.innerHTML=`<p class="up"><b>Imported ${n} cards</b> (${rows.length} different) into “${esc(nm)}”.</p>${j.missing.length?`<p class="down">Couldn't find ${j.missing.length}: ${j.missing.map(t=>esc(t)).join(', ')}</p>`:''}${j.skipped?`<p class="mute">Skipped ${j.skipped} maybeboard cards.</p>`:''}<button class="p" id="op">Open deck</button>`;
 $('op').onclick=()=>open(col)
 }catch(e){if(col)await sb.from('collections').delete().eq('id',col.id);r.innerHTML=`<p class="down">${esc(e.message||e)}</p>`;$('go').disabled=false}}
-const fieldsOf=c=>({name:c.name,legalities:c.legalities||null,color_identity:(c.color_identity||[]).join(''),type_line:c.type_line||c.card_faces?.[0]?.type_line||null,colors:(c.colors||c.card_faces?.[0]?.colors||[]).join(','),cmc:c.cmc,rarity:c.rarity,set_name:c.set_name,artist:c.artist||c.card_faces?.[0]?.artist||null,set_code:c.set,collector:c.collector_number,details:[c.full_art&&'full art',c.border_color=='borderless'&&'borderless',c.promo&&'promo'].filter(Boolean).join(', ')});
+const extraOf=c=>({legalities:c.legalities||null,color_identity:(c.color_identity||[]).join(''),keywords:c.keywords||(c.card_faces&&c.card_faces[0]&&c.card_faces[0].keywords)||[],oracle_text:c.oracle_text||(c.card_faces||[]).map(f=>f.oracle_text).filter(Boolean).join('\n')||null,mana_cost:c.mana_cost||(c.card_faces&&c.card_faces[0]&&c.card_faces[0].mana_cost)||''});
+const fieldsOf=c=>({name:c.name,...extraOf(c),type_line:c.type_line||c.card_faces?.[0]?.type_line||null,colors:(c.colors||c.card_faces?.[0]?.colors||[]).join(','),cmc:c.cmc,rarity:c.rarity,set_name:c.set_name,artist:c.artist||c.card_faces?.[0]?.artist||null,set_code:c.set,collector:c.collector_number,details:[c.full_art&&'full art',c.border_color=='borderless'&&'borderless',c.promo&&'promo'].filter(Boolean).join(', ')});
 async function swapScreen(e,c){scrollTo(0,0);app.innerHTML=`<div class="top"><button id="bk">Back to ${esc(c.name)}</button></div><h2>Change printing</h2><div class="mute"><b>${esc(e.name)}</b> · now ${esc(e.set_code).toUpperCase()} #${esc(e.collector)} · ${e.finish}. Pick the printing to use instead. Quantity, owned and commander settings stay as they are.</div><div id="res"><p class="mute">Loading printings…</p></div>`;
 $('bk').onclick=()=>open(c);
 let url=`https://api.scryfall.com/cards/search?unique=prints&order=released&include_extras=true&q=${encodeURIComponent('!"'+e.name.split(' // ')[0]+'" or !"'+e.name+'"')}`;const cards=[];
@@ -224,12 +266,43 @@ $('cq').oninput=()=>{clearTimeout(cmT);cmT=setTimeout(go,300)}};
 draw()}
 function cmdPicker(c,es,F,tid){scrollTo(0,0);const bw=F.n.includes('Brawl');
 const isC=e=>{const t=(e.type_line||'').split(' // ')[0];return t.includes('Legendary')&&(t.includes('Creature')||(bw&&t.includes('Planeswalker')))};
-const cm=es.filter(e=>e.is_commander&&e.board!='side'),cand=es.filter(e=>e.board!='side'&&!e.is_commander&&isC(e)).sort(byName),partner=!!tid&&F.cmdr[1]>1&&cm.length<F.cmdr[1];
-app.innerHTML=`<div class="top"><button id="bk">Back to ${esc(c.name)}</button></div><h2>${tid?'Swap Commander':'Choose Commander'}</h2><p class="mute">Pick a legendary ${bw?'creature or planeswalker':'creature'} that is in your deck.</p>${cand.map(e=>`<div class="row" data-sid="${e.scryfall_id}"><img class="th" loading="lazy" alt="" src="${pic(e.scryfall_id)}"><div class="grow"><b>${esc(e.name)}</b><div class="mute">${esc(e.type_line||'')}</div></div><button data-pk="${e.id}">${tid?'Swap in':'Make commander'}</button>${partner?` <button data-pp="${e.id}">Add as partner</button>`:''}</div>`).join('')||'<p class="mute">There are no legendary creatures in your deck yet. Use Add card to add one, then come back.</p>'}`;
+const cm=es.filter(e=>e.is_commander&&(e.board||'main')=='main'),cand=es.filter(e=>(e.board||'main')=='main'&&!e.is_commander&&isC(e)).sort(byName),partner=!!tid&&F.cmdr[1]>1&&cm.length<F.cmdr[1];
+app.innerHTML=`<div class="top"><button id="bk">Back to ${esc(c.name)}</button></div><h2>${tid?'Swap Commander':'Choose Commander'}</h2><p class="mute">Pick a legendary ${bw?'creature or planeswalker':'creature'} that is in your deck.</p>${cand.map(e=>`<div class="row" data-sid="${e.scryfall_id}"><img class="th" loading="lazy" alt="" src="${pic(e.scryfall_id)}"><div class="grow"><b>${esc(e.name)}</b><div class="mute">${esc(e.type_line||'')}</div></div><button data-pk="${e.id}">${tid?'Swap in':'Make commander'}</button>${partner&&compat(cm[0],e)?` <button data-pp="${e.id}">Add as partner</button>`:''}</div>`).join('')||'<p class="mute">There are no legendary creatures in your deck yet. Use Add card to add one, then come back.</p>'}`;
 $('bk').onclick=()=>open(c);
 const set=(id,v)=>sb.from('entries').update({is_commander:v}).eq('id',id);
 app.querySelectorAll('[data-pk]').forEach(b=>b.onclick=async()=>{const e=es.find(z=>z.id==b.dataset.pk),old=tid&&es.find(z=>z.id==tid);if(old)await set(old.id,false);await set(e.id,true);if(old&&c.thumb_id==old.scryfall_id){await sb.from('collections').update({thumb_id:e.scryfall_id}).eq('id',c.id);c.thumb_id=e.scryfall_id}open(c)});
 app.querySelectorAll('[data-pp]').forEach(b=>b.onclick=async()=>{await set(b.dataset.pp,true);open(c)})}
+async function scry(q){const r=await fetch(`https://api.scryfall.com/cards/search?unique=cards&order=name&q=${encodeURIComponent(q)}`);return r.ok?(await r.json()).data:[]}
+const ETday=()=>new Date().toLocaleDateString('en-CA',{timeZone:'America/New_York'});
+const compLine=k=>{const m=(k.oracle_text||'').match(/Companion\s*—\s*([^\n(]+)/);return m?m[1].trim():''};
+async function addEntry(c,k,board,extra){const fin=(k.finishes||[]).includes('nonfoil')?'nonfoil':(k.finishes||['nonfoil'])[0],p=+(k.prices||{})[COL[fin]];
+await sb.from('entries').insert({collection_id:c.id,scryfall_id:k.id,finish:fin,qty:1,board,ownership:'owned',...extra,...fieldsOf(k)});
+if(p)await sb.from('prices').upsert({scryfall_id:k.id,finish:fin,snap_date:ETday(),usd:p},{ignoreDuplicates:true})}
+async function compScreen(c,es,F){scrollTo(0,0);const old=es.filter(e=>e.board=='companion'),deck=es.filter(e=>(e.board||'main')=='main'),mn=deck.reduce((n,e)=>n+e.qty,0);
+app.innerHTML=`<div class="top"><button id="bk">Back to ${esc(c.name)}</button></div><h2>${old.length?'Swap Companion':'Add Companion'}</h2><p class="mute">Every card with Companion is listed, with whether your deck meets its rule right now. Type a name to search.</p><input id="cq2" autocomplete="off" placeholder="Search companions by name"><div id="cr2"><p class="mute">Loading…</p></div>`;
+$('bk').onclick=()=>open(c);
+let list=[];
+const show=async t=>{const r=$('cr2');r.innerHTML='<p class="mute">Searching…</p>';list=await scry('keyword:companion game:paper'+(t?` name:"${t.replace(/"/g,'')}"`:''));
+if(!list.length){r.innerHTML='<p class="mute">No companions found.</p>';return}
+r.innerHTML=list.map((k,i)=>{const chk=checkCompanion(fieldsOf(k),deck,F,mn);return`<div class="row" data-sid="${k.id}"><img class="th" loading="lazy" alt="" src="${pic(k.id)}"><div class="grow"><b>${esc(k.name)}</b><div class="mute">${esc(compLine(k))}</div><div class="${chk.ok?'up':'down'}">${chk.ok?'✓ Your deck meets this rule':'✗ '+esc(chk.msg)}</div></div><button data-ac="${i}">${old.length?'Swap in':'Add'}</button></div>`}).join('');
+r.querySelectorAll('[data-ac]').forEach(b=>b.onclick=async()=>{b.disabled=true;const k=list[b.dataset.ac];for(const o of old)await sb.from('entries').delete().eq('id',o.id);await addEntry(c,k,'companion',{});open(c)})};
+let t0;$('cq2').oninput=()=>{clearTimeout(t0);t0=setTimeout(()=>show($('cq2').value.trim()),300)};show('')}
+async function partnerScreen(c,es,F){scrollTo(0,0);const cmd=es.find(e=>e.is_commander&&(e.board||'main')=='main'),x=cmd?pk(cmd):{};
+let q=null;
+if(x.pwith)q=`!"${x.pwith.replace(/"/g,'')}"`;else if(x.partner)q='keyword:partner -o:"partner with"';else if(x.friends)q='keyword:"friends forever"';else if(x.bgc)q='t:background';else if(x.bg)q='keyword:"choose a background"';else if(x.doc)q=`keyword:"doctor's companion"`;else if(x.dc)q='t:time t:lord t:doctor';
+const inDeck=cmd?es.filter(e=>(e.board||'main')=='main'&&!e.is_commander&&compat(cmd,e)):[];
+const note=!cmd?'Choose a commander first.':!cmd.keywords?'This commander\'s details have not loaded yet. They fill in overnight.':q?'Pick a legal partner for '+esc(cmd.name)+'.':esc(cmd.name)+' does not have a partner ability, so it cannot have a second commander.';
+app.innerHTML=`<div class="top"><button id="bk">Back to ${esc(c.name)}</button></div><h2>Add Partner</h2><p class="mute">${note}</p><h3>In your deck</h3>${inDeck.map(e=>`<div class="row" data-sid="${e.scryfall_id}"><img class="th" loading="lazy" alt="" src="${pic(e.scryfall_id)}"><div class="grow"><b>${esc(e.name)}</b><div class="mute">${esc(e.type_line||'')}</div></div><button data-pk="${e.id}">Make partner</button></div>`).join('')||'<p class="mute">No card in your deck can be partnered with this commander.</p>'}${q?'<h3>Search Scryfall</h3><input id="pq" autocomplete="off" placeholder="Type to search partners by name"><div id="pr"><p class="mute">Loading…</p></div>':''}`;
+$('bk').onclick=()=>open(c);
+app.querySelectorAll('[data-pk]').forEach(b=>b.onclick=async()=>{await sb.from('entries').update({is_commander:true}).eq('id',b.dataset.pk);open(c)});
+if(!q)return;
+let list=[];
+const show=async t=>{const r=$('pr');r.innerHTML='<p class="mute">Searching…</p>';
+list=(await scry(q+' game:paper'+(t?` name:"${t.replace(/"/g,'')}"`:''))).filter(k=>frontN(k.name)!=frontN(cmd.name)&&compat(cmd,fieldsOf(k))).slice(0,40);
+if(!list.length){r.innerHTML='<p class="mute">No partners found.</p>';return}
+r.innerHTML=list.map((k,i)=>`<div class="row" data-sid="${k.id}"><img class="th" loading="lazy" alt="" src="${pic(k.id)}"><div class="grow"><b>${esc(k.name)}</b><div class="mute">${esc(k.type_line)}</div></div><button data-ap="${i}">Add as partner</button></div>`).join('');
+r.querySelectorAll('[data-ap]').forEach(b=>b.onclick=async()=>{b.disabled=true;await addEntry(c,list[b.dataset.ap],'main',{is_commander:true});open(c)})};
+let t0;$('pq').oninput=()=>{clearTimeout(t0);t0=setTimeout(()=>show($('pq').value.trim()),300)};show('')}
 function finder(){ret=0;app.innerHTML=`${tabsHtml()}<input id="fq" autocomplete="off" placeholder="Type a card name, e.g. Sol Ring" value="${esc(lastQ)}"><div id="fr"></div>`;bindTabs();
 const run=async()=>{lastQ=$('fq').value.trim();const r=$('fr');if(lastQ.length<2){r.innerHTML='<p class="mute">Type at least 2 letters to search your collections and decks.</p>';return}
 const[{data:es},{data:cs}]=await Promise.all([sb.from('entries').select('*').ilike('name','%'+lastQ.replace(/[%_]/g,'')+'%'),sb.from('collections').select('id,name,kind,thumb_id')]);
@@ -247,6 +320,7 @@ const fmt=p=>p==null?'':`<span class="${p>=0?'up':'down'}">${p>=0?'▲':'▼'} $
 async function open(c){cur=c;tab=c.kind;const deck=c.kind=='deck';try{grp=localStorage.getItem(deck?'group':'group_c')||(deck?'type':'none')}catch{grp=deck?'type':'none'}const{data:es}=await sb.from('entries').select('*').eq('collection_id',c.id).order('name');
 const customs=Object.keys(c.custom_groups||{});if(grp.startsWith('c:')&&!customs.includes(grp.slice(2)))grp=deck?'type':'none';window._ct=grp.startsWith('c:')?((c.custom_groups||{})[grp.slice(2)]||[]):[];
 const F=deck?fmtOf(c):null,V=deck?validate(c,es):null;
+const ncm=deck&&F.cmdr?es.filter(z=>z.is_commander&&(z.board||'main')=='main').length:0;
 const ids=[...new Set(es.map(e=>e.scryfall_id))];let ps=[];
 if(ids.length){const r=await sb.from('prices').select('*').in('scryfall_id',ids).order('snap_date');ps=r.data||[]}
 const H={};ps.forEach(p=>(H[p.scryfall_id+p.finish]??=[]).push({d:p.snap_date,usd:+p.usd}));
@@ -259,18 +333,19 @@ const row=e=>{const h=H[e.scryfall_id+e.finish]||[],now=h.at(-1)?.usd,st=e.owner
 const tb=`<button class="sm" data-th="${e.id}">${c.thumb_id==e.scryfall_id?'Unset thumbnail':'Set as thumbnail'}</button>`;
 const cgn=grp.startsWith('c:')?grp.slice(2):null;
 const tagSel=cgn?`<select class="sm" data-tg="${e.id}" aria-label="${esc(cgn)} tag for ${esc(e.name)}"><option value="">${esc(cgn)}: (none)</option>${((c.custom_groups||{})[cgn]||[]).map(t=>`<option value="${esc(t)}"${(e.tags||{})[cgn]==t?' selected':''}>${esc(t)}</option>`).join('')}<option value="__new">＋ New tag…</option></select>`:'';
-const bdSel=deck?`<select class="sm" data-bd="${e.id}" aria-label="Board for ${esc(e.name)}"><option value="main">Main Deck</option><option value="side"${e.board=='side'?' selected':''}>Sideboard</option></select>`:'';
+const bdSel=deck&&e.board!='companion'?`<select class="sm" data-bd="${e.id}" aria-label="Board for ${esc(e.name)}"><option value="main">Main Deck</option><option value="side"${e.board=='side'?' selected':''}>Sideboard</option></select>`:'';
 const ownSel=deck?`<select class="sm ${st=='need'?'down':st=='proxy'?'mute':''}" data-own="${e.id}" aria-label="Ownership for ${esc(e.name)}">${[['owned','Owned'],['proxy','Proxy'],['need','Need to Buy']].map(([v,l])=>`<option value="${v}"${st==v?' selected':''}>${l}</option>`).join('')}</select>`:'';
-const cmdBtn=deck&&F.oath&&e.board!='side'?`<button class="sm" data-cmd="${e.id}">${e.is_commander?'Unset commander':'Make commander'}</button>`:'';
-const swBtn=deck&&F.cmdr&&!F.oath&&e.is_commander&&e.board!='side'?`<button class="sm" data-swc="${e.id}">Swap Commander</button>`:'';
-const x=`<div>${ownSel} ${bdSel} ${cmdBtn}${swBtn} ${tb} <button class="sm" data-sw="${e.id}">Change printing</button> ${tagSel}</div>`;
+const cmdBtn=deck&&F.oath&&(e.board||'main')=='main'?`<button class="sm" data-cmd="${e.id}">${e.is_commander?'Unset commander':'Make commander'}</button>`:'';
+const swBtn=deck&&F.cmdr&&!F.oath&&e.is_commander&&(e.board||'main')=='main'?`<button class="sm" data-swc="${e.id}">Swap Commander</button>${ncm>1?` <button class="sm" data-cmd="${e.id}">Unset commander</button>`:''}`:'';
+const compBtn=deck&&e.board=='companion'?`<button class="sm" data-swcmp="${e.id}">Swap Companion</button> <button class="sm" data-rmcmp="${e.id}">Remove companion</button>`:'';
+const x=`<div>${ownSel} ${bdSel} ${cmdBtn}${swBtn}${compBtn} ${tb} <button class="sm" data-sw="${e.id}">Change printing</button> ${tagSel}</div>`;
 if(view=='grid')return`<div class="gc"><img class="gi" loading="lazy" alt="${esc(e.name)}" src="${big(e.scryfall_id)}"><div class="gp"><button class="pbtn" data-hist="${e.id}" aria-label="Price history for ${esc(e.name)}">${money(now)}</button> <span class="mute">${fmt(chg(h,7))||'new'} wk</span></div><div class="mute gn"><b>${esc(e.name)}</b><br>${esc(e.set_code).toUpperCase()} #${esc(e.collector)} · ${e.finish}${e.details?' · '+esc(e.details):''}</div>${x}${deck?'':decksFor(e.name)}<div class="gq"><button data-q="${e.id}:-1" aria-label="Remove one">−</button> ${e.qty} <button data-q="${e.id}:1" aria-label="Add one">+</button></div></div>`;
 return`<div class="row" data-sid="${e.scryfall_id}">${view=='text'?'':`<img class="th" loading="lazy" alt="" src="${pic(e.scryfall_id)}">`}<div class="grow"><b>${esc(e.name)}</b><div class="mute">${esc(e.set_code).toUpperCase()} #${esc(e.collector)} · ${e.finish}${e.details?' · '+esc(e.details):''}</div>${x}${deck?'':decksFor(e.name)}</div>
 ${view=='text'?'':spark(h.map(y=>y.usd))}<div class="num"><button class="pbtn" data-hist="${e.id}" aria-label="Price history for ${esc(e.name)}">${money(now)}</button><div class="mute">${fmt(chg(h,7))||'new'} wk · ${fmt(chg(h,28))||'–'} 4wk</div></div>
 <div><button data-q="${e.id}:-1" aria-label="Remove one">−</button> ${e.qty} <button data-q="${e.id}:1" aria-label="Add one">+</button></div></div>`};
 const srtd=a=>[...a].sort(cmpFor());
 const wrap=a=>a.length?(view=='grid'?`<div class="grid">${srtd(a).map(row).join('')}</div>`:srtd(a).map(row).join('')):'';
-const side=es.filter(e=>e.board=='side'),mainAll=deck?es.filter(e=>e.board!='side'):es,cm=F&&F.cmdr?mainAll.filter(e=>e.is_commander):[],rest=mainAll.filter(e=>!cm.includes(e));
+const comp=es.filter(e=>e.board=='companion'),side=es.filter(e=>e.board=='side'),mainAll=deck?es.filter(e=>(e.board||'main')=='main'):es,cm=F&&F.cmdr?mainAll.filter(e=>e.is_commander):[],rest=mainAll.filter(e=>!cm.includes(e));
 const groups=a=>{const g={};a.forEach(e=>{const k=keyOf(e);(g[k]??={k,s:sortOf(e,k),a:[]}).a.push(e)});
 return Object.values(g).sort((x,y)=>typeof x.s=='number'&&typeof y.s=='number'?x.s-y.s:String(x.s).localeCompare(String(y.s)))};
 const gh=a=>groups(a).map(({k,a})=>`<h3>${esc(k)} <span class="mute">(${a.reduce((n,e)=>n+e.qty,0)})</span></h3>${wrap(a)}`).join('');
@@ -280,16 +355,20 @@ const gx=`<button role="menuitem" data-gnew="1">＋ New custom group…</button>
 const gdd=dd('Group',GLc,grp,'data-g',gx),sdd=dd('Sort',SL,srt,'data-s');
 const fdd=deck?dd('Format',Object.entries(FMT).map(([k,v])=>[k,v.n]),c.format||'commander','data-f'):'';
 const erb=deck&&F.custom?'<div><button class="sm" id="er">Edit custom rules</button></div>':'';
+const compSec=deck&&!F.oath?`<h3>Companion</h3>${wrap(comp)||'<p class="mute">No companion. <button class="sm" data-addc="">Add Companion</button></p>'}`:'';
 const sideSec=side.length?`<h3>Sideboard <span class="mute">(${side.reduce((n,e)=>n+e.qty,0)})</span></h3>${wrap(side)}`:'';
-const body=deck?`${F.cmdr?`<h3>${F.oath?'Oathbreaker &amp; signature spell':'Commander'}</h3>${wrap(cm)||(F.oath?'<p class="mute">Not chosen yet. Tap “Make commander” on a card below.</p>':'<p class="mute">No commander yet. <button class="sm" data-swc="">Choose Commander</button></p>')}`:''}${cats}${sideSec}`:(es.length?(grp=='none'?wrap(es):gh(es)):'<p class="mute">Empty. Use “Add card” to search by name and pick a printing.</p>');
+const body=deck?`${F.cmdr?`<h3>${F.oath?'Oathbreaker &amp; signature spell':'Commander'}</h3>${wrap(cm)||(F.oath?'<p class="mute">Not chosen yet. Tap “Make commander” on a card below.</p>':'<p class="mute">No commander yet. <button class="sm" data-swc="">Choose Commander</button></p>')}${F.cmdr[1]>1&&!F.oath&&cm.length==1?'<p><button class="sm" data-addp="1">Add Partner</button></p>':''}`:''}${compSec}${cats}${sideSec}`:(es.length?(grp=='none'?wrap(es):gh(es)):'<p class="mute">Empty. Use “Add card” to search by name and pick a printing.</p>');
 const n=es.reduce((a,e)=>a+e.qty,0);
-const vp=V?`<div class="vp" role="status"><div class="mute">${ruleText(F)}</div>${V.out.length?V.out.map(([l,t])=>`<div class="${l=='err'?'down':'warn'}">${l=='err'?'✖':'⚠'} ${t}</div>`).join(''):`<div class="up">✓ Legal for ${esc(F.n)}</div>`}</div>`:'';
+const vp=V?`<div class="vp" role="status"><div class="mute">${ruleText(F)}</div>${V.out.length?V.out.map(([l,t])=>`<div class="${l=='err'?'down':'warn'}">${l=='err'?'✖':'⚠'} ${t}</div>`).join(''):`<div class="up">✓ Legal for ${esc(F.n)}</div>`}${V.notes.map(t=>`<div class="up">${t}</div>`).join('')}</div>`:'';
 const okc=V?(V.out.some(z=>z[0]=='err')?'down':(F.max!=null?V.mn==F.max:F.min!=null?V.mn>=F.min:true)?'up':''):'';
 const info=deck?`<div class="mute"><b class="${okc}">${V.mn}${F.max!=null?' / '+F.max:F.min!=null?' (min '+F.min+')':''} main deck cards</b>${F.side!=null||V.sn?` · Sideboard ${V.sn}${F.side!=null?' / '+F.side:''}`:''}</div><div class="mute">${needN?`Still need ${needN} card${needN>1?'s':''} · ${money(need)} to buy`:'You have every card in this deck'}${proxyN?` · ${proxyN} proxy card${proxyN>1?'s':''}`:''}</div>${vp}`:`<div class="mute">${n} cards, latest prices</div>`;
 app.innerHTML=`<div class="top"><button id="bk">Back to ${deck?'decks':'collections'}</button><button class="p" id="ad">Add card</button></div><h2>${esc(c.name)}</h2><div class="total">${money(total)}</div>${info}${fdd}${dd('Display',[['list','List'],['grid','Grid'],['text','Text only']],view,'data-v')}${gdd}${sdd}${erb}${body}`;
 if(ret){const y=ret;ret=0;requestAnimationFrame(()=>scrollTo(0,y))}else scrollTo(0,0);
 app.querySelectorAll('[data-hist]').forEach(b=>b.onclick=()=>{const e=es.find(x=>x.id==b.dataset.hist);showHist(e,H[e.scryfall_id+e.finish]||[])});
 app.querySelectorAll('[data-swc]').forEach(b=>b.onclick=()=>cmdPicker(c,es,F,b.dataset.swc||null));
+app.querySelectorAll('[data-addc],[data-swcmp]').forEach(b=>b.onclick=()=>{ret=scrollY;compScreen(c,es,F)});
+app.querySelectorAll('[data-rmcmp]').forEach(b=>b.onclick=async()=>{if(confirm('Remove this companion?')){await sb.from('entries').delete().eq('id',b.dataset.rmcmp);reopen(c)}});
+app.querySelectorAll('[data-addp]').forEach(b=>b.onclick=()=>{ret=scrollY;partnerScreen(c,es,F)});
 app.querySelectorAll('[data-bd]').forEach(b=>b.onchange=async()=>{const e=es.find(z=>z.id==b.dataset.bd),u={board:b.value};if(b.value=='side')u.is_commander=false;await sb.from('entries').update(u).eq('id',e.id);reopen(c)});
 app.querySelectorAll('[data-tg]').forEach(b=>b.onchange=async()=>{const e=es.find(z=>z.id==b.dataset.tg),n=grp.slice(2);let v=b.value;
 if(v=='__new'){v=(prompt('New tag for the group "'+n+'":')||'').trim();if(!v){reopen(c);return}const cg={...(c.custom_groups||{})};if(!(cg[n]||[]).includes(v)){cg[n]=[...(cg[n]||[]),v];await sb.from('collections').update({custom_groups:cg}).eq('id',c.id);c.custom_groups=cg}}
@@ -333,7 +412,7 @@ res.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>add(b))}
 async function add(b){const[i,f]=b.dataset.a.split(':'),c=window._c[i];b.disabled=true;const bd=$('ab')?$('ab').value:'main';
 const{data:ex}=await sb.from('entries').select('id,qty').eq('collection_id',cur.id).eq('scryfall_id',c.id).eq('finish',f).eq('board',bd);
 if(ex?.length)await sb.from('entries').update({qty:ex[0].qty+1}).eq('id',ex[0].id);
-else await sb.from('entries').insert({collection_id:cur.id,scryfall_id:c.id,finish:f,board:bd,legalities:c.legalities||null,color_identity:(c.color_identity||[]).join(''),ownership:$('own')&&!$('own').checked?'need':'owned',name:c.name,type_line:c.type_line||c.card_faces?.[0]?.type_line||null,colors:(c.colors||c.card_faces?.[0]?.colors||[]).join(','),cmc:c.cmc,rarity:c.rarity,set_name:c.set_name,artist:c.artist||c.card_faces?.[0]?.artist||null,set_code:c.set,collector:c.collector_number,
+else await sb.from('entries').insert({collection_id:cur.id,scryfall_id:c.id,finish:f,board:bd,...extraOf(c),ownership:$('own')&&!$('own').checked?'need':'owned',name:c.name,type_line:c.type_line||c.card_faces?.[0]?.type_line||null,colors:(c.colors||c.card_faces?.[0]?.colors||[]).join(','),cmc:c.cmc,rarity:c.rarity,set_name:c.set_name,artist:c.artist||c.card_faces?.[0]?.artist||null,set_code:c.set,collector:c.collector_number,
 details:[c.full_art&&'full art',c.border_color=='borderless'&&'borderless',c.promo&&'promo'].filter(Boolean).join(', ')});
 const p=+c.prices[COL[f]];if(p)await sb.from('prices').upsert({scryfall_id:c.id,finish:f,snap_date:new Date().toLocaleDateString('en-CA',{timeZone:'America/New_York'}),usd:p},{ignoreDuplicates:true});
 b.textContent='Added ✓'}
