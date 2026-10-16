@@ -70,6 +70,7 @@ if(F.side!=null)p.push(`${F.side}-card sideboard`);
 if(F.cmdr)p.push(F.cmdr[0]==F.cmdr[1]?(F.cmdr[0]==2?'Oathbreaker + signature spell':'1 commander'):'1-2 commanders');
 if(F.ci)p.push('color identity');
 return `${esc(F.n)}: ${p.join(', ')}.${F.note?' '+esc(F.note):''}`};
+const cn=n=>{const p=String(n).split(' // ');return p.length==2&&p[0]==p[1]?p[0]:n};
 function validate(c,es){const F=fmtOf(c),out=[],q=a=>a.reduce((n,e)=>n+e.qty,0);
 const main=es.filter(e=>e.board!='side'),side=es.filter(e=>e.board=='side'),mn=q(main),sn=q(side);
 if(F.max!=null&&mn>F.max)out.push(['err',`<b>Too many cards:</b> ${mn} / ${F.max} in the main deck (${mn-F.max} over).`]);
@@ -82,9 +83,9 @@ if(bad.banned.length)out.push(['err',`<b>Banned in ${esc(F.n)}:</b> ${nm(bad.ban
 if(bad.restricted.length)out.push(['warn',`<b>Restricted in ${esc(F.n)}</b> (only 1 copy allowed): ${nm(bad.restricted)}`]);
 if(bad.not_legal.length)out.push(['err',`<b>Not legal in ${esc(F.n)}:</b> ${nm(bad.not_legal)}`]);
 if(unk)out.push(['warn',`${unk} card${unk>1?'s have':' has'} no legality data yet. It fills in overnight.`])}
-const by={},basic=new Set();es.forEach(e=>{by[e.name]=(by[e.name]||0)+e.qty;if((e.type_line||'').includes('Basic'))basic.add(e.name)});
+const by={},basic=new Set();es.forEach(e=>{const k=cn(e.name);by[k]=(by[k]||0)+e.qty;if((e.type_line||'').includes('Basic'))basic.add(k)});
 const over=[];for(const[n,k]of Object.entries(by)){if(basic.has(n)||ANY.has(n))continue;
-const rs=F.restr&&F.key&&es.some(e=>e.name==n&&e.legalities?.[F.key]=='restricted');
+const rs=F.restr&&F.key&&es.some(e=>cn(e.name)==n&&e.legalities?.[F.key]=='restricted');
 const lim=LIM[n]??(rs?1:F.copies);if(lim!=null&&k>lim)over.push(`${esc(n)} ×${k} (max ${lim})`)}
 if(over.length)out.push(['err',`<b>Too many copies:</b> ${over.join(', ')}`]);
 if(F.cmdr){const cm=main.filter(e=>e.is_commander),k=q(cm);
@@ -179,7 +180,7 @@ $('op').onclick=()=>open(col)
 const fieldsOf=c=>({name:c.name,legalities:c.legalities||null,color_identity:(c.color_identity||[]).join(''),type_line:c.type_line||c.card_faces?.[0]?.type_line||null,colors:(c.colors||c.card_faces?.[0]?.colors||[]).join(','),cmc:c.cmc,rarity:c.rarity,set_name:c.set_name,artist:c.artist||c.card_faces?.[0]?.artist||null,set_code:c.set,collector:c.collector_number,details:[c.full_art&&'full art',c.border_color=='borderless'&&'borderless',c.promo&&'promo'].filter(Boolean).join(', ')});
 async function swapScreen(e,c){scrollTo(0,0);app.innerHTML=`<div class="top"><button id="bk">Back to ${esc(c.name)}</button></div><h2>Change printing</h2><div class="mute"><b>${esc(e.name)}</b> · now ${esc(e.set_code).toUpperCase()} #${esc(e.collector)} · ${e.finish}. Pick the printing to use instead. Quantity, owned and commander settings stay as they are.</div><div id="res"><p class="mute">Loading printings…</p></div>`;
 $('bk').onclick=()=>open(c);
-let url=`https://api.scryfall.com/cards/search?unique=prints&order=released&include_extras=true&q=${encodeURIComponent('!"'+e.name+'"')}`;const cards=[];
+let url=`https://api.scryfall.com/cards/search?unique=prints&order=released&include_extras=true&q=${encodeURIComponent('!"'+e.name.split(' // ')[0]+'" or !"'+e.name+'"')}`;const cards=[];
 for(let i=0;url&&i<5;i++){const r=await fetch(url);if(!r.ok)break;const j=await r.json();cards.push(...j.data);url=j.has_more?j.next_page:null}
 const res=$('res');if(!cards.length){res.innerHTML='<p class="down">Could not load printings for this card. Please try again later.</p>';return}
 window._s=cards;
