@@ -58,6 +58,12 @@ h3{scroll-margin-top:12px}
 .jtab{border-radius:12px 0 0 12px;border-right:0;padding:10px 10px 10px 12px;background:var(--acc);color:var(--bg);font-size:13px;box-shadow:0 2px 10px #0005;white-space:nowrap}
 .jmenu{position:absolute;right:100%;top:50%;transform:translateY(-50%);margin-right:6px;background:var(--panel);color:var(--ink);border:1px solid var(--ink);border-radius:8px;max-height:70vh;overflow:auto;min-width:190px;max-width:72vw;padding:4px;box-shadow:0 6px 18px #0006}
 .jmenu button{display:block;width:100%;text-align:left;border:0;padding:9px 10px;border-radius:6px}.jmenu button:hover,.jmenu button:focus-visible{background:var(--line)}
+.tabs{overflow-x:auto}.tabs button{padding:10px 12px;white-space:nowrap}
+.cam{position:relative;width:100%;background:#000;border-radius:10px;overflow:hidden;margin:8px 0}.cam video{width:100%;height:100%;object-fit:contain;display:block}
+.gd{position:absolute;border:2px solid #fff;border-radius:6px;box-shadow:0 0 0 1px #0008;pointer-events:none}
+.camph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;background:#000a}.camph[hidden]{display:none}
+.cbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+#spm{position:fixed;inset:0;background:#000a;display:flex;align-items:center;justify-content:center;z-index:30;padding:12px}#spm>div{background:var(--panel);color:var(--ink);border-radius:10px;max-width:640px;width:100%;max-height:88vh;overflow:auto;padding:14px}
 </style></head><body><main id="app"></main><img id="pv" alt=""><button id="top" aria-label="Back to top" title="Back to top">↑</button>
 <script>
 const SB_URL='https://wihratryjsmcbpsistkj.supabase.co',SB_KEY='sb_publishable_6k9ibJeQe9iDIxYOCxgPPA_tJTjth8f';
@@ -189,10 +195,10 @@ async function init(){const{data}=await sb.auth.getSession();data.session?home()
 function auth(msg=''){app.innerHTML=`<h1>Card Ledger</h1><p class="mute">Sign in to see your collections and decks on every device.</p><input id="em" type="email" placeholder="Email"><input id="pw" type="password" placeholder="Password (6+ characters)"><p class="down">${esc(msg)}</p><button class="p" id="in">Sign in</button> <button id="up">Create account</button>`;
 $('in').onclick=async()=>{const{error}=await sb.auth.signInWithPassword({email:$('em').value,password:$('pw').value});error?auth(error.message):home()};
 $('up').onclick=async()=>{const{data,error}=await sb.auth.signUp({email:$('em').value,password:$('pw').value});error?auth(error.message):data.session?home():auth('Check your email to confirm, then sign in.')}}
-const tabsHtml=()=>`<div class="top"><h1>Card Ledger</h1><button id="out">Sign out</button></div><div class="tabs"><button data-t="collection" class="${tab=='collection'?'on':''}">Collections</button><button data-t="deck" class="${tab=='deck'?'on':''}">Decks</button><button data-t="search" class="${tab=='search'?'on':''}">Find a card</button></div>`;
+const tabsHtml=()=>`<div class="top"><h1>Card Ledger</h1><button id="out">Sign out</button></div><div class="tabs"><button data-t="collection" class="${tab=='collection'?'on':''}">Collections</button><button data-t="deck" class="${tab=='deck'?'on':''}">Decks</button><button data-t="search" class="${tab=='search'?'on':''}">Find a card</button><button data-t="scan" class="${tab=='scan'?'on':''}">Card Scanner</button></div>`;
 function bindTabs(){app.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{tab=b.dataset.t;home()});$('out').onclick=async()=>{await sb.auth.signOut();auth()}}
 let lastQ='';
-async function home(){cur=null;ret=0;needOnly=false;pickedCmd=null;if(tab=='search')return finder();const deck=tab=='deck',nm=deck?'deck':'collection';
+async function home(){cur=null;ret=0;needOnly=false;pickedCmd=null;stopCam();if(tab=='scan')return scanScreen();if(tab=='search')return finder();const deck=tab=='deck',nm=deck?'deck':'collection';
 const{data}=await sb.from('collections').select('*').eq('kind',tab).order('created_at');
 const{data:tt}=await sb.from('collection_totals').select('*');const T=Object.fromEntries((tt||[]).map(t=>[t.collection_id,t]));
 const tot=id=>{const t=T[id],n=t?t.cards:0;return money(t?+t.total:0)+' · '+n+' card'+(n==1?'':'s')};
@@ -359,6 +365,106 @@ return`<h3>Deck stats</h3><div class="mute">Counts the main deck${m.some(e=>e.is
 <div class="pies"><div class="sc"><h4>Color pips in mana costs</h4>${pieSvg(items(pips),'Color pips in mana costs')}</div>
 <div class="sc"><h4>Mana your lands can produce</h4>${pieSvg(items(prod),'Mana lands can produce')}<div class="mute">Each land counts once for every color it can tap for.</div></div></div>
 <div class="sc"><h4>Card types</h4>${trow||'<p class="mute">Nothing to show yet.</p>'}</div></div>`}
+const SCN={items:[],n:1,stream:null,worker:null,busy:false};
+const NAMEWL="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz',-. ",CODEWL="ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/•·.*★- ";
+const NAMECROPS=[[.045,.035,.78,.115],[.03,.02,.94,.17]];
+const CARDAR=63/88,GRIDS={p:{1:[1,1],2:[1,2],4:[2,2],6:[2,3],9:[3,3]},l:{1:[1,1],2:[2,1],4:[2,2],6:[3,2],9:[3,3]}};
+function cellRects(W,H,n){const[cols,rows]=GRIDS[H>W?'p':'l'][n],cw=W/cols,ch=H/rows,out=[];
+for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){let h=ch*.92,w=h*CARDAR;if(w>cw*.92){w=cw*.92;h=w/CARDAR}out.push({x:c*cw+(cw-w)/2,y:r*ch+(ch-h)/2,w,h})}return out}
+const lev=(a,b)=>{const m=a.length,n=b.length,d=Array.from({length:m+1},(_,i)=>{const r=Array(n+1).fill(0);r[0]=i;return r});for(let j=1;j<=n;j++)d[0][j]=j;
+for(let i=1;i<=m;i++)for(let j=1;j<=n;j++)d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+(a[i-1]==b[j-1]?0:1));return d[m][n]};
+const simil=(a,b)=>{a=String(a).toLowerCase().replace(/[^a-z]/g,'');b=frontN(b).replace(/[^a-z]/g,'');if(!a||!b)return 0;const aa=a.length>b.length?a.slice(0,b.length):a;return 1-lev(aa,b)/Math.max(aa.length,b.length)};
+const cleanName=t=>String(t).replace(/[0158|]/g,c=>({'0':'O','1':'l','5':'S','8':'B','|':'l'}[c])).replace(/[^A-Za-z',\-.: ]+/g,' ').replace(/\s+/g,' ').trim();
+function parseCode(t){let set=null,cn=null;const L=String(t).split(/\n/).map(x=>x.trim()).filter(Boolean);
+for(const l of L){if(!cn){const m=l.match(/(?:^|[^\d])(\d{1,4})(?:\s*\/\s*\d{1,4})?(?:[^\d]|$)/);if(m)cn=m[1].replace(/^0+(?=\d)/,'')}
+if(!set){let m=l.match(/\b([A-Z][A-Z0-9]{2,4})\s*[•·.*-]?\s*(?:EN|JA|DE|FR|ES|IT|PT|RU|KO|ZH|PH)\b/);if(!m&&cn)m=l.match(/^([A-Z][A-Z0-9]{2,4})\b(?!\s*\d)/);if(m&&!/^(EN|JA|DE|FR|ES|IT|PT|RU|KO|ZH|PH)$/.test(m[1]))set=m[1].toLowerCase()}}
+return{set,cn}}
+const sj=async u=>{try{const r=await fetch(u);return r.ok?await r.json():null}catch{return null}};
+const sleepMs=ms=>new Promise(r=>setTimeout(r,ms));
+async function identify(raw){let byCode=null,byName=null;
+if(raw.set&&raw.cn){byCode=await sj(`https://api.scryfall.com/cards/${encodeURIComponent(raw.set)}/${encodeURIComponent(raw.cn)}`);await sleepMs(100)}
+if(raw.name&&raw.name.length>=3){byName=await sj(`https://api.scryfall.com/cards/named?fuzzy=${encodeURIComponent(raw.name)}`);await sleepMs(100)}
+if(byCode&&byName){if(frontN(byCode.name)==frontN(byName.name)||simil(raw.name,byCode.name)>=.7)return{card:byCode,how:'both',ok:true};
+return{card:byName,how:'name',ok:false,note:'The set code and number did not match the name, so please check the printing.'}}
+if(byCode)return{card:byCode,how:'code',ok:!raw.name||simil(raw.name,byCode.name)>=.5};
+if(byName)return{card:byName,how:'name',ok:false,note:'No set code was read, so the printing is a guess.'};
+return null}
+function cropCanvas(src,rc,fx,fy,fw,fh,minH){const sx=rc.x+fx*rc.w,sy=rc.y+fy*rc.h,sw=fw*rc.w,sh=fh*rc.h,sc=Math.max(1,minH/sh),c=document.createElement('canvas');c.width=Math.max(1,Math.round(sw*sc));c.height=Math.max(1,Math.round(sh*sc));
+const g=c.getContext('2d');g.drawImage(src,sx,sy,sw,sh,0,0,c.width,c.height);const d=g.getImageData(0,0,c.width,c.height),p=d.data;let sum=0,lo=255,hi=0;
+for(let i=0;i<p.length;i+=4){const v=.299*p[i]+.587*p[i+1]+.114*p[i+2];p[i]=v;sum+=v;if(v<lo)lo=v;if(v>hi)hi=v}
+const inv=sum/(p.length/4)<110,span=Math.max(1,hi-lo);for(let i=0;i<p.length;i+=4){let v=(p[i]-lo)/span*255;if(inv)v=255-v;p[i]=p[i+1]=p[i+2]=v}g.putImageData(d,0,0);return c}
+function loadTess(){return window.Tesseract?Promise.resolve():new Promise((ok,no)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.0/dist/tesseract.min.js';s.onload=ok;s.onerror=()=>no(new Error('Could not load the text reader. Check your internet connection.'));document.head.appendChild(s)})}
+async function getWorker(){if(SCN.worker)return SCN.worker;setScanStatus('Loading the text reader. This takes a little while the first time.');await loadTess();SCN.worker=await Tesseract.createWorker('eng');return SCN.worker}
+async function readName(src,rc,idx){const w=await getWorker(),[fx,fy,fw,fh]=NAMECROPS[idx];await w.setParameters({tessedit_pageseg_mode:'7',tessedit_char_whitelist:NAMEWL});const r=await w.recognize(cropCanvas(src,rc,fx,fy,fw,fh,90));return cleanName(r.data.text)}
+async function readCard(src,rc){const name=await readName(src,rc,0),w=await getWorker();await w.setParameters({tessedit_pageseg_mode:'6',tessedit_char_whitelist:CODEWL});
+const r=await w.recognize(cropCanvas(src,rc,.02,.9,.6,.095,110));return{name,...parseCode(r.data.text),codeText:String(r.data.text).trim()}}
+function mkItem(res,raw){if(!res||!res.card)return{card:null,raw,qty:1};const k=res.card,fin=(k.finishes||[]).includes('nonfoil')?'nonfoil':(k.finishes||['nonfoil'])[0];return{card:k,finish:fin,qty:1,how:res.how,ok:res.ok,note:res.note||'',raw}}
+function pushItem(res,raw){const it=mkItem(res,raw);if(it.card){const ex=SCN.items.find(x=>x.card&&x.card.id==it.card.id&&x.finish==it.finish);if(ex){ex.qty++;return}}SCN.items.push(it)}
+async function doScan(src){const rects=cellRects(src.width,src.height,SCN.n);let added=0,empty=0;
+for(let i=0;i<rects.length;i++){setScanStatus(rects.length>1?`Reading card ${i+1} of ${rects.length}…`:'Reading the card…');
+const raw=await readCard(src,rects[i]);if(raw.name.length<3&&!(raw.set&&raw.cn)){empty++;continue}
+let res=await identify(raw);if(!res){const n2=await readName(src,rects[i],1);if(n2&&n2!=raw.name){raw.name=n2;res=await identify(raw)}}
+pushItem(res,raw);added++;renderScanList()}
+setScanStatus(added?`Read ${added} card${added>1?'s':''}${empty?` (${empty} empty spot${empty>1?'s':''} skipped)`:''}. Check the list below.`:'No cards were read. Hold the card steady inside a white box with good light, then try again.')}
+const setScanStatus=t=>{const e=$('sst');if(e)e.textContent=t};
+function renderScanGuides(W,H){const g=$('gds');if(g)g.innerHTML=cellRects(W,H,SCN.n).map(r=>`<div class="gd" style="left:${(r.x/W*100).toFixed(2)}%;top:${(r.y/H*100).toFixed(2)}%;width:${(r.w/W*100).toFixed(2)}%;height:${(r.h/H*100).toFixed(2)}%"></div>`).join('')}
+function stopCam(){if(SCN.stream){SCN.stream.getTracks().forEach(t=>t.stop());SCN.stream=null}const v=$('vid');if(v)v.srcObject=null;const p=$('camph');if(p)p.hidden=false;const b=$('scam');if(b)b.textContent='Start camera';const g=$('sgo');if(g)g.disabled=true}
+async function startCam(){setScanStatus('');
+if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){setScanStatus('This browser cannot open the camera on this page. Use "Take or choose photos" below instead.');return}
+try{stopCam();SCN.stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}},audio:false});
+const v=$('vid');if(!v){stopCam();return}
+v.onloadedmetadata=()=>{$('cam').style.aspectRatio=v.videoWidth+'/'+v.videoHeight;renderScanGuides(v.videoWidth,v.videoHeight)};
+v.srcObject=SCN.stream;await v.play();$('camph').hidden=true;$('scam').textContent='Stop camera';$('sgo').disabled=false;setScanStatus('Line each card up with a white box, then tap Scan.')}
+catch(e){stopCam();setScanStatus(e&&e.name=='NotAllowedError'?'Camera permission was blocked. Allow the camera for this site in your browser settings, or use "Take or choose photos".':'Could not start the camera: '+(e&&e.message||e))}}
+async function runScan(canvas){if(SCN.busy)return;SCN.busy=true;const go=$('sgo');if(go)go.disabled=true;
+try{await doScan(canvas)}catch(e){setScanStatus('Something went wrong while reading: '+(e&&e.message||e))}
+SCN.busy=false;if($('sgo')&&SCN.stream)$('sgo').disabled=false}
+const scanTag=it=>(it.how=='both'?'✓ Name and set code agree':it.how=='code'?(it.ok?'✓ Matched by set code and number':'⚠ Matched by set code and number, but the name was unclear'):it.how=='picked'?'✓ Printing chosen by you':'⚠ Matched by name only. Check the printing.')+(it.note?' '+it.note:'');
+function updateScanAdd(){const b=$('sadd1');if(!b)return;const n=SCN.items.reduce((a,x)=>a+(x.card?x.qty:0),0);b.disabled=!n;b.textContent=n?`Add ${n} card${n>1?'s':''}`:'Add cards'}
+function renderScanList(){const L=$('slist');if(!L)return;const n=SCN.items.reduce((a,x)=>a+(x.card?x.qty:0),0),sc=$('scount');if(sc)sc.textContent=n?`(${n})`:'';
+L.innerHTML=SCN.items.length?SCN.items.map((it,i)=>it.card?`<div class="row" data-sid="${it.card.id}">${thumb(it.card.id,it.card.layout,0)}<div class="grow"><b>${esc(it.card.name)}</b><div class="mute">${esc(it.card.set_name)} (${esc(it.card.set.toUpperCase())}) #${esc(it.card.collector_number)}</div><div class="${it.ok?'up':'warn'}">${esc(scanTag(it))}</div><div><select class="sm" data-sfin="${i}" aria-label="Finish">${(it.card.finishes||['nonfoil']).map(f=>`<option value="${f}"${f==it.finish?' selected':''}>${f}</option>`).join('')}</select> <button class="sm" data-spick="${i}">Change printing</button></div></div><div><button data-sqty="${i}:-1" aria-label="One fewer">−</button> ${it.qty} <button data-sqty="${i}:1" aria-label="One more">+</button> <button data-sdel="${i}" aria-label="Remove">✕</button></div></div>`
+:`<div class="row"><div class="grow"><b>Could not identify this card</b><div class="mute">Read: ${esc(it.raw&&(it.raw.name||it.raw.codeText)||'nothing')}</div><input id="fix${i}" autocomplete="off" placeholder="Type the card name"><button class="sm" data-sfixgo="${i}">Find it</button></div><div><button data-sdel="${i}" aria-label="Remove">✕</button></div></div>`).join(''):'<p class="mute">Nothing scanned yet.</p>';
+L.querySelectorAll('[data-sqty]').forEach(b=>b.onclick=()=>{const[i,d]=b.dataset.sqty.split(':'),it=SCN.items[i];it.qty=Math.max(1,it.qty+ +d);renderScanList()});
+L.querySelectorAll('[data-sdel]').forEach(b=>b.onclick=()=>{SCN.items.splice(+b.dataset.sdel,1);renderScanList()});
+L.querySelectorAll('[data-sfin]').forEach(b=>b.onchange=()=>{SCN.items[b.dataset.sfin].finish=b.value});
+L.querySelectorAll('[data-spick]').forEach(b=>b.onclick=()=>scanPick(+b.dataset.spick));
+L.querySelectorAll('[data-sfixgo]').forEach(b=>b.onclick=async()=>{const i=+b.dataset.sfixgo,v=$('fix'+i).value.trim();if(v.length<2)return;b.disabled=true;const res=await identify({name:v});if(res){SCN.items[i]=mkItem({...res,ok:false,note:'You typed the name, so check the printing.'},{name:v})}else{b.disabled=false;b.textContent='Not found. Try again'}renderScanList()});
+updateScanAdd()}
+async function scanPick(i){const it=SCN.items[i],m=document.createElement('div');m.id='spm';
+m.innerHTML=`<div role="dialog" aria-modal="true" aria-label="Choose a printing"><div class="top"><b>Which printing do you have?</b><button id="spx">Close</button></div><div id="spr"><p class="mute">Loading printings…</p></div></div>`;document.body.appendChild(m);
+const close=()=>m.remove();$('spx').onclick=close;m.onclick=e=>{if(e.target==m)close()};
+let url=it.card.prints_search_uri;const cards=[];for(let p=0;url&&p<5;p++){const j=await sj(url);if(!j)break;cards.push(...j.data);url=j.has_more?j.next_page:null}
+if(!cards.length){$('spr').innerHTML='<p class="down">Could not load the printings. Please try again.</p>';return}
+const rowFn=(k,idx)=>`<div class="row" data-sid="${k.id}"><img class="th" loading="lazy" alt="" src="${pic(k.id)}"><div class="grow"><b>${esc(k.set_name)}</b><div class="mute">${esc(k.set.toUpperCase())} #${esc(k.collector_number)}${k.id==it.card.id?' · current':''}</div></div>${(k.finishes||[]).map(f=>`<button data-pp="${idx}:${f}">${f} ${money(+k.prices[COL[f]]||null)}</button>`).join(' ')}</div>`;
+showPrintings($('spr'),cards,rowFn,l=>l.querySelectorAll('[data-pp]').forEach(b=>b.onclick=()=>{const[ix,f]=b.dataset.pp.split(':');it.card=cards[ix];it.finish=f;it.how='picked';it.ok=true;it.note='';close();renderScanList()}))}
+async function renderScanAdd(){const box=$('sadd');if(!box)return;const{data:cols}=await sb.from('collections').select('id,name,kind').order('created_at');if(!$('sadd'))return;
+const dc=(cols||[]).filter(c=>c.kind=='collection'),dk=(cols||[]).filter(c=>c.kind=='deck');let last='';try{last=localStorage.getItem('scanDest')||''}catch{}
+const opt=c=>`<option value="${c.id}|${c.kind}"${last==c.id+'|'+c.kind?' selected':''}>${esc(c.name)}</option>`;
+box.innerHTML=`<div class="sc"><h4>Add the scanned cards to</h4>${(cols||[]).length?`<select id="sdest" class="fs" aria-label="Where to add the cards">${dc.length?`<optgroup label="Collections">${dc.map(opt).join('')}</optgroup>`:''}${dk.length?`<optgroup label="Decks">${dk.map(opt).join('')}</optgroup>`:''}</select><div id="sbdw" hidden><label class="ck2">Add to <select id="sbd" class="sm"><option value="main">Main Deck</option><option value="side">Sideboard</option></select></label></div><label class="ck2"><input type="checkbox" id="sown" checked> I own these cards</label><p><button class="p" id="sadd1" disabled>Add cards</button></p><div id="sres"></div>`:'<p class="mute">Create a collection or deck first, then come back to add the scanned cards.</p>'}</div>`;
+if(!$('sdest'))return;const tg=()=>{$('sbdw').hidden=$('sdest').value.split('|')[1]!='deck'};$('sdest').onchange=tg;tg();updateScanAdd();
+$('sadd1').onclick=async()=>{const[id,kind]=$('sdest').value.split('|'),name=$('sdest').selectedOptions[0].textContent,items=SCN.items.filter(x=>x.card);if(!items.length)return;$('sadd1').disabled=true;
+const board=kind=='deck'?$('sbd').value:'main',own=$('sown').checked;try{localStorage.setItem('scanDest',$('sdest').value)}catch{}
+for(const it of items){const k=it.card,ex=await sb.from('entries').select('id,qty').eq('collection_id',id).eq('scryfall_id',k.id).eq('finish',it.finish).eq('board',board);
+if(ex.data&&ex.data.length)await sb.from('entries').update({qty:ex.data[0].qty+it.qty}).eq('id',ex.data[0].id);
+else await sb.from('entries').insert({collection_id:id,scryfall_id:k.id,finish:it.finish,qty:it.qty,board,ownership:own?'owned':'need',...fieldsOf(k)});
+const p=+(k.prices||{})[COL[it.finish]];if(p)await sb.from('prices').upsert({scryfall_id:k.id,finish:it.finish,snap_date:ETday(),usd:p},{ignoreDuplicates:true})}
+const n=items.reduce((a,x)=>a+x.qty,0);SCN.items=SCN.items.filter(x=>!x.card);renderScanList();
+if($('sres')){$('sres').innerHTML=`<p class="up"><b>Added ${n} card${n>1?'s':''}</b> to ${esc(name)}.</p><button id="sopen">Open it</button>`;$('sopen').onclick=async()=>{const r=await sb.from('collections').select('*').eq('id',id).single();if(r.data){stopCam();open(r.data)}}}}}
+function scanScreen(){stopCam();try{SCN.n=+(localStorage.getItem('scanN')||1)||1}catch{}
+app.innerHTML=`${tabsHtml()}<h2>Card Scanner</h2><p class="mute">Point your camera at a card and tap Scan. It reads the card's name and the set code and number in the bottom left corner (newer cards), then finds the exact printing. Choose more than 1 card in view to scan several at once.</p>
+<div class="cam" id="cam" style="aspect-ratio:3/4"><video id="vid" playsinline muted></video><div id="gds"></div><div class="camph" id="camph">Camera is off</div></div>
+<div class="cbar"><label class="ck2">Cards in view <select id="sn" class="sm" aria-label="How many cards are in view">${[1,2,4,6,9].map(n=>`<option value="${n}"${n==SCN.n?' selected':''}>${n}</option>`).join('')}</select></label><button id="scam">Start camera</button><button class="p" id="sgo" disabled>Scan</button></div>
+<p><label class="ck2">Or take or choose photos: <input type="file" id="sfile" accept="image/*" capture="environment" multiple style="width:auto"></label></p>
+<div class="mute" id="sst" role="status" aria-live="polite"></div>
+<h3>Scanned cards <span class="mute" id="scount"></span></h3><div id="slist"></div><div id="sadd"></div>`;
+bindTabs();renderScanGuides(720,960);renderScanList();renderScanAdd();
+$('sn').onchange=()=>{SCN.n=+$('sn').value;try{localStorage.setItem('scanN',SCN.n)}catch{}const v=$('vid');renderScanGuides(v&&v.videoWidth||720,v&&v.videoHeight||960)};
+$('scam').onclick=()=>SCN.stream?stopCam():startCam();
+$('sgo').onclick=()=>{const v=$('vid');if(!SCN.stream||!v.videoWidth)return;const c=document.createElement('canvas');c.width=v.videoWidth;c.height=v.videoHeight;c.getContext('2d').drawImage(v,0,0);runScan(c)};
+$('sfile').onchange=async e=>{const fs=[...e.target.files];e.target.value='';for(const f of fs){try{const bm=await createImageBitmap(f,{imageOrientation:'from-image'}),k=Math.min(1,2400/Math.max(bm.width,bm.height)),c=document.createElement('canvas');c.width=Math.round(bm.width*k);c.height=Math.round(bm.height*k);c.getContext('2d').drawImage(bm,0,0,c.width,c.height);await runScan(c)}catch(err){setScanStatus('Could not read that photo: '+(err&&err.message||err))}}}}
+setInterval(()=>{if(SCN.stream&&!document.getElementById('vid'))stopCam()},800);
+document.addEventListener('visibilitychange',()=>{if(document.hidden)stopCam()});
+document.addEventListener('keydown',e=>{if(e.key=='Escape'){const m=document.getElementById('spm');if(m)m.remove()}});
 function finder(){ret=0;needOnly=false;app.innerHTML=`${tabsHtml()}<input id="fq" autocomplete="off" placeholder="Type a card name, e.g. Sol Ring" value="${esc(lastQ)}"><div id="fr"></div>`;bindTabs();
 const run=async()=>{lastQ=$('fq').value.trim();const r=$('fr');if(lastQ.length<2){r.innerHTML='<p class="mute">Type at least 2 letters to search your collections and decks.</p>';return}
 const[{data:es},{data:cs}]=await Promise.all([sb.from('entries').select('*').ilike('name','%'+lastQ.replace(/[%_]/g,'')+'%'),sb.from('collections').select('id,name,kind,thumb_id')]);
