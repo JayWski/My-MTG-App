@@ -48,6 +48,16 @@ button[data-a][aria-pressed=true]{background:var(--acc);color:var(--bg)}
 .pie{display:flex;gap:14px;align-items:center;flex-wrap:wrap}.leg{list-style:none;margin:0;padding:0;font-size:13px}.leg li{display:flex;align-items:center;gap:6px;margin:3px 0}
 .sw{width:12px;height:12px;border-radius:3px;border:1px solid currentColor;display:inline-block;flex:none}
 .tr{display:grid;grid-template-columns:110px 1fr 34px;gap:8px;align-items:center;font-size:14px;margin:4px 0}.tr b{text-align:right}.tb{height:8px;border-radius:4px;background:var(--acc);opacity:.75;display:block}
+.ck2{display:inline-flex;align-items:center;gap:6px;font-size:14px}.ck2 input{width:auto;margin:0}
+.link2{border:0;padding:0;background:none;color:var(--up);text-decoration:underline;cursor:pointer;font:inherit}
+.hl{outline:3px solid var(--up);outline-offset:3px;border-radius:6px}
+.sq{position:sticky;top:0;background:var(--panel);padding:4px;display:flex;gap:6px;z-index:1}.sq input{flex:1;min-width:0;margin:0;padding:8px}.ck[hidden]{display:none}
+#top{opacity:.5;transition:opacity .2s}#top:hover,#top:focus-visible,#top:active{opacity:.95}
+h3{scroll-margin-top:12px}
+.jump{position:fixed;right:0;top:50%;transform:translateY(-50%);z-index:11;opacity:.5;transition:opacity .2s}.jump:hover,.jump:focus-within,.jump.open{opacity:1}
+.jtab{border-radius:12px 0 0 12px;border-right:0;padding:10px 10px 10px 12px;background:var(--acc);color:var(--bg);font-size:13px;box-shadow:0 2px 10px #0005;white-space:nowrap}
+.jmenu{position:absolute;right:100%;top:50%;transform:translateY(-50%);margin-right:6px;background:var(--panel);color:var(--ink);border:1px solid var(--ink);border-radius:8px;max-height:70vh;overflow:auto;min-width:190px;max-width:72vw;padding:4px;box-shadow:0 6px 18px #0006}
+.jmenu button{display:block;width:100%;text-align:left;border:0;padding:9px 10px;border-radius:6px}.jmenu button:hover,.jmenu button:focus-visible{background:var(--line)}
 </style></head><body><main id="app"></main><img id="pv" alt=""><button id="top" aria-label="Back to top" title="Back to top">↑</button>
 <script>
 const SB_URL='https://wihratryjsmcbpsistkj.supabase.co',SB_KEY='sb_publishable_6k9ibJeQe9iDIxYOCxgPPA_tJTjth8f';
@@ -171,7 +181,7 @@ const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&g
 const $=id=>document.getElementById(id),money=n=>n==null?'–':'$'+n.toFixed(2);
 const pic=id=>`https://cards.scryfall.io/small/front/${id[0]}/${id[1]}/${id}.jpg`;
 let srt='az';try{srt=localStorage.getItem('sort')||'az'}catch{}
-let ret=0,needOnly=false;const reopen=c=>{ret=scrollY;return open(c)};
+let ret=0,needOnly=false,focusCard=null;const reopen=c=>{ret=scrollY;return open(c)};
 let grp='type';try{grp=localStorage.getItem('group')||'type'}catch{}
 let cur=null,tab='collection',view=matchMedia('(max-width:699px)').matches?'grid':'list';try{view=localStorage.getItem('view')||view}catch{}
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
@@ -184,7 +194,9 @@ function bindTabs(){app.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{t
 let lastQ='';
 async function home(){cur=null;ret=0;needOnly=false;pickedCmd=null;if(tab=='search')return finder();const deck=tab=='deck',nm=deck?'deck':'collection';
 const{data}=await sb.from('collections').select('*').eq('kind',tab).order('created_at');
-const rows=[...(data||[])].sort((a,b)=>(b.favorite?1:0)-(a.favorite?1:0)).map(c=>`<div class="row">${c.thumb_id?`<img class="th" data-id="${c.id}" style="cursor:pointer" loading="lazy" alt="" src="${pic(c.thumb_id)}">`:'<div class="th"></div>'}${star('c',c.id,c.favorite)}<button class="link grow" data-id="${c.id}">${esc(c.name)}</button><button data-del="${c.id}" aria-label="Delete ${esc(c.name)}">Delete</button></div>`).join('')||`<p class="mute">No ${nm}s yet. Name your first one below.</p>`;
+const{data:tt}=await sb.from('collection_totals').select('*');const T=Object.fromEntries((tt||[]).map(t=>[t.collection_id,t]));
+const tot=id=>{const t=T[id],n=t?t.cards:0;return money(t?+t.total:0)+' · '+n+' card'+(n==1?'':'s')};
+const rows=[...(data||[])].sort((a,b)=>(b.favorite?1:0)-(a.favorite?1:0)).map(c=>`<div class="row">${c.thumb_id?`<img class="th" data-id="${c.id}" style="cursor:pointer" loading="lazy" alt="" src="${pic(c.thumb_id)}">`:'<div class="th"></div>'}${star('c',c.id,c.favorite)}<div class="grow"><button class="link" data-id="${c.id}">${esc(c.name)}</button><div class="mute">${tot(c.id)}</div></div><button data-del="${c.id}" aria-label="Delete ${esc(c.name)}">Delete</button></div>`).join('')||`<p class="mute">No ${nm}s yet. Name your first one below.</p>`;
 app.innerHTML=`${tabsHtml()}${rows}<p><input id="nm" placeholder="${deck?'New deck, e.g. Atraxa EDH':'New collection, e.g. Trade binder'}">${deck?`<select id="nf" class="fs" aria-label="Deck format">${Object.entries(FMT).map(([k,v])=>`<option value="${k}">${v.n}</option>`).join('')}</select>`:''}</p><div id="cmw"></div><p><button class="p" id="mk">Create ${nm}</button>${deck?' <button id="imp">Import a deck</button>':''}</p>`;
 bindTabs();
 if(deck)$('imp').onclick=importScreen;
@@ -247,7 +259,7 @@ window._s=cards;
 const rowFn=(k,i)=>{const d=[k.full_art&&'full art',k.border_color=='borderless'&&'borderless',k.promo&&'promo',...(k.frame_effects||[])].filter(Boolean).join(', ');
 return`<div class="row" data-sid="${k.id}"><img class="th" loading="lazy" alt="" src="${pic(k.id)}"><div class="grow"><b>${esc(k.set_name)}</b><div class="mute">${k.set.toUpperCase()} #${esc(k.collector_number)}${d?' · '+esc(d):''}</div></div>
 ${k.finishes.map(f=>{const cur=k.id==e.scryfall_id&&f==e.finish;return`<button data-a="${i}:${f}" ${cur?'disabled':''}>${cur?'✓ current':f+' '+money(+k.prices[COL[f]]||null)}</button>`}).join(' ')}</div>`};
-showPrintings(res,cards,rowFn,l=>l.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>doSwap(e,c,b)))}
+showPrintings(res,cards,rowFn,l=>l.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>doSwap(e,c,b)),await ownedPrintings(cards))}
 async function doSwap(e,c,b){const[i,f]=b.dataset.a.split(':'),k=window._s[i];document.querySelectorAll('[data-a]').forEach(x=>x.disabled=true);
 const ex=await sb.from('entries').select('id,qty,is_commander').eq('collection_id',c.id).eq('scryfall_id',k.id).eq('finish',f).eq('board',e.board||'main').neq('id',e.id);
 if(ex.data?.length){const t=ex.data[0];await sb.from('entries').update({qty:t.qty+e.qty,is_commander:t.is_commander||e.is_commander}).eq('id',t.id);await sb.from('entries').delete().eq('id',e.id)}
@@ -352,8 +364,8 @@ const run=async()=>{lastQ=$('fq').value.trim();const r=$('fr');if(lastQ.length<2
 const[{data:es},{data:cs}]=await Promise.all([sb.from('entries').select('*').ilike('name','%'+lastQ.replace(/[%_]/g,'')+'%'),sb.from('collections').select('id,name,kind,thumb_id')]);
 const cn=Object.fromEntries((cs||[]).map(c=>[c.id,c])),g={};(es||[]).forEach(e=>(g[e.name]??=[]).push(e));
 const names=Object.keys(g).sort();
-r.innerHTML=names.length?names.map(n=>{const L=g[n];return`<div class="row" data-sid="${L[0].scryfall_id}" style="align-items:flex-start"><img class="th" loading="lazy" alt="" src="${pic(L[0].scryfall_id)}"><div class="grow"><b>${esc(n)}</b> <span class="mute">· ${L.reduce((a,e)=>a+e.qty,0)} total in ${L.length} place${L.length>1?'s':''}</span>${L.map(e=>{const c=cn[e.collection_id]||{},dk=c.kind=='deck';return`<div><button class="link" data-go="${e.collection_id}">${esc(c.name)}</button> <span class="mute">${dk?'Deck':'Collection'} · ${esc(e.set_code).toUpperCase()} #${esc(e.collector)} · ${e.finish} · ×${e.qty}${dk&&e.ownership=='need'?' · need to buy':dk&&e.ownership=='proxy'?' · proxy':''}${e.is_commander?' · commander':''}</span></div>`}).join('')}</div></div>`}).join(''):`<p class="mute">No card matching “${esc(lastQ)}” in your collections or decks.</p>`;
-r.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>open(cn[b.dataset.go]))};
+r.innerHTML=names.length?names.map(n=>{const L=g[n];return`<div class="row" data-sid="${L[0].scryfall_id}" style="align-items:flex-start"><img class="th" loading="lazy" alt="" src="${pic(L[0].scryfall_id)}"><div class="grow"><b>${esc(n)}</b> <span class="mute">· ${L.reduce((a,e)=>a+e.qty,0)} total in ${L.length} place${L.length>1?'s':''}</span>${L.map(e=>{const c=cn[e.collection_id]||{},dk=c.kind=='deck';return`<div><button class="link" data-go="${e.collection_id}" data-fc="${e.scryfall_id}|${e.finish}">${esc(c.name)}</button> <span class="mute">${dk?'Deck':'Collection'} · ${esc(e.set_code).toUpperCase()} #${esc(e.collector)} · ${e.finish} · ×${e.qty}${dk&&e.ownership=='need'?' · need to buy':dk&&e.ownership=='proxy'?' · proxy':''}${e.is_commander?' · commander':''}</span></div>`}).join('')}</div></div>`}).join(''):`<p class="mute">No card matching “${esc(lastQ)}” in your collections or decks.</p>`;
+r.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{focusCard=b.dataset.fc;needOnly=false;open(cn[b.dataset.go])})};
 let t;$('fq').oninput=()=>{clearTimeout(t);t=setTimeout(run,250)};$('fq').onkeydown=e=>{if(e.key=='Enter')run()};if(lastQ)run();$('fq').focus()}
 function spark(v){if(v.length<2)return'<svg class="sp"></svg>';const lo=Math.min(...v),hi=Math.max(...v),r=hi-lo||1;
 const p=v.map((y,i)=>`${(i/(v.length-1)*62+1).toFixed(1)},${(18-(y-lo)/r*16).toFixed(1)}`).join(' ');
@@ -370,8 +382,8 @@ if(ids.length){const r=await sb.from('prices').select('*').in('scryfall_id',ids)
 const H={};ps.forEach(p=>(H[p.scryfall_id+p.finish]??=[]).push({d:p.snap_date,usd:+p.usd}));
 const inD={};if(!deck&&es.length){const{data:dk}=await sb.from('collections').select('id,name').eq('kind','deck');
 if(dk?.length){const dn=Object.fromEntries(dk.map(d=>[d.id,d.name])),{data:de}=await sb.from('entries').select('scryfall_id,finish,qty,collection_id').in('collection_id',dk.map(d=>d.id)).in('scryfall_id',[...new Set(es.map(e=>e.scryfall_id))]);
-(de||[]).forEach(x=>{const m=(inD[x.scryfall_id+'|'+x.finish]??={}),n=dn[x.collection_id];m[n]=(m[n]||0)+x.qty})}}
-const decksFor=e=>{const m=inD[e.scryfall_id+'|'+e.finish];return`<div class="mute">${m?'In decks: '+Object.entries(m).map(([n,q])=>esc(n)+(q>1?' ×'+q:'')).join(', '):'Not in any deck'}</div>`};
+(de||[]).forEach(x=>{const m=(inD[x.scryfall_id+'|'+x.finish]??={});const o=(m[x.collection_id]??={n:dn[x.collection_id],q:0});o.q+=x.qty})}}
+const decksFor=e=>{const m=inD[e.scryfall_id+'|'+e.finish];return`<div class="mute">${m?'In decks: '+Object.entries(m).map(([id,o])=>`<button class="link2" data-gd="${id}|${e.scryfall_id}|${e.finish}" title="Open this deck at this card">${esc(o.n)}${o.q>1?' ×'+o.q:''}</button>`).join(', '):'Not in any deck'}</div>`};
 let total=0,need=0,needN=0,proxyN=0;
 window._pr={};es.forEach(e=>{const h=H[e.scryfall_id+e.finish]||[],now=h.length?h[h.length-1].usd:null,st=e.ownership||'owned';window._pr[e.id]=now;if(now)total+=now*e.qty;if(deck&&st=='proxy')proxyN+=e.qty;if(deck&&st=='need'){needN+=e.qty;if(now)need+=now*e.qty}});
 const only=deck&&needOnly&&needN>0;
@@ -387,8 +399,8 @@ const cmdBtn=deck&&F.oath&&(e.board||'main')=='main'?`<button class="sm" data-cm
 const swBtn=deck&&F.cmdr&&!F.oath&&e.is_commander&&(e.board||'main')=='main'?`<button class="sm" data-swc="${e.id}">Swap Commander</button>${ncm>1?` <button class="sm" data-cmd="${e.id}">Unset commander</button>`:''}`:'';
 const compBtn=deck&&e.board=='companion'?`<button class="sm" data-swcmp="${e.id}">Swap Companion</button> <button class="sm" data-rmcmp="${e.id}">Remove companion</button>`:'';
 const x=`<div>${ownSel} ${bdSel} ${cmdBtn}${swBtn}${compBtn} ${tb} <button class="sm" data-sw="${e.id}">Change printing</button> ${tagSel}</div>`;
-if(view=='grid')return`<div class="gc">${thumb(e.scryfall_id,e.layout,1,esc(e.name))}<div class="gp"><button class="pbtn" data-hist="${e.id}" aria-label="Price history for ${esc(e.name)}">${money(now)}</button> <span class="mute">${fmt(chg(h,7))||'new'} wk</span></div><div class="mute gn">${deck?'':star('e',e.id,e.favorite)}<b>${esc(e.name)}</b>${gcb}<br>${esc(e.set_code).toUpperCase()} #${esc(e.collector)} · ${e.finish}${e.details?' · '+esc(e.details):''}</div>${x}${deck?'':decksFor(e)}<div class="gq"><button data-q="${e.id}:-1" aria-label="Remove one">−</button> ${e.qty} <button data-q="${e.id}:1" aria-label="Add one">+</button></div></div>`;
-return`<div class="row" data-sid="${e.scryfall_id}">${view=='text'?'':thumb(e.scryfall_id,e.layout,0)}<div class="grow">${deck?'':star('e',e.id,e.favorite)}<b>${esc(e.name)}</b>${gcb}<div class="mute">${esc(e.set_code).toUpperCase()} #${esc(e.collector)} · ${e.finish}${e.details?' · '+esc(e.details):''}</div>${x}${deck?'':decksFor(e)}</div>
+if(view=='grid')return`<div class="gc" data-cid="${e.scryfall_id}|${e.finish}">${thumb(e.scryfall_id,e.layout,1,esc(e.name))}<div class="gp"><button class="pbtn" data-hist="${e.id}" aria-label="Price history for ${esc(e.name)}">${money(now)}</button> <span class="mute">${fmt(chg(h,7))||'new'} wk</span></div><div class="mute gn">${deck?'':star('e',e.id,e.favorite)}<b>${esc(e.name)}</b>${gcb}<br>${esc(e.set_code).toUpperCase()} #${esc(e.collector)} · ${e.finish}${e.details?' · '+esc(e.details):''}</div>${x}${deck?'':decksFor(e)}<div class="gq"><button data-q="${e.id}:-1" aria-label="Remove one">−</button> ${e.qty} <button data-q="${e.id}:1" aria-label="Add one">+</button></div></div>`;
+return`<div class="row" data-sid="${e.scryfall_id}" data-cid="${e.scryfall_id}|${e.finish}">${view=='text'?'':thumb(e.scryfall_id,e.layout,0)}<div class="grow">${deck?'':star('e',e.id,e.favorite)}<b>${esc(e.name)}</b>${gcb}<div class="mute">${esc(e.set_code).toUpperCase()} #${esc(e.collector)} · ${e.finish}${e.details?' · '+esc(e.details):''}</div>${x}${deck?'':decksFor(e)}</div>
 ${view=='text'?'':spark(h.map(y=>y.usd))}<div class="num"><button class="pbtn" data-hist="${e.id}" aria-label="Price history for ${esc(e.name)}">${money(now)}</button><div class="mute">${fmt(chg(h,7))||'new'} wk · ${fmt(chg(h,28))||'–'} 4wk</div></div>
 <div><button data-q="${e.id}:-1" aria-label="Remove one">−</button> ${e.qty} <button data-q="${e.id}:1" aria-label="Add one">+</button></div></div>`};
 const srtd=a=>{const f=cmpFor();return[...a].sort((x,y)=>(deck?0:(y.favorite?1:0)-(x.favorite?1:0))||f(x,y))};
@@ -407,6 +419,10 @@ const statsSec=deck&&!only?statsHtml(es):'';
 const compSec=deck&&!F.oath&&(!only||comp.length)?`<h3>Companion</h3>${wrap(comp)||'<p class="mute">No companion. <button class="sm" data-addc="">Add Companion</button></p>'}`:'';
 const sideSec=side.length?`<h3>Sideboard <span class="mute">(${side.reduce((n,e)=>n+e.qty,0)})</span></h3>${wrap(side)}`:'';
 const body=deck?`${F.cmdr&&(!only||cm.length)?`<h3>${F.oath?'Oathbreaker &amp; signature spell':'Commander'}</h3>${wrap(cm)||(F.oath?'<p class="mute">Not chosen yet. Tap “Make commander” on a card below.</p>':'<p class="mute">No commander yet. <button class="sm" data-swc="">Choose Commander</button></p>')}${F.cmdr[1]>1&&!F.oath&&cm.length==1&&!only?'<p><button class="sm" data-addp="1">Add Partner</button></p>':''}`:''}${compSec}${cats}${sideSec}${statsSec}`:(es.length?(grp=='none'?wrap(es):gh(es)):'<p class="mute">Empty. Use “Add card” to search by name and pick a printing.</p>');
+let hk=0;const bodyJ=body.replace(/<h3>/g,()=>`<h3 id="sec${hk++}">`);
+const jItems=[...bodyJ.matchAll(/<h3 id="sec(\d+)">([^]*?)<\/h3>/g)].map(m=>[m[1],m[2].replace(/<[^>]+>/g,'').replace(/\s+/g,' ').trim()]);
+const jLabel=(GL.find(g=>g[0]==grp)||[0,grp.startsWith('c:')?grp.slice(2):'Jump'])[1];
+const jumpHtml=jItems.length>1?`<div class="jump"><button class="jtab" aria-haspopup="true" aria-expanded="false" aria-label="Jump to a section of this list" title="Jump to a section">${grp=='none'?'Jump':esc(jLabel)} ▾</button><div class="jmenu" role="menu" hidden>${jItems.map(([i,t])=>`<button role="menuitem" data-jm="${i}">${t}</button>`).join('')}</div></div>`:'';
 const n=es.reduce((a,e)=>a+e.qty,0);
 const gcOn=deck&&F&&F.key=='commander';
 const gcMain=gcOn?es.filter(e=>(e.board||'main')=='main'&&e.game_changer):[];
@@ -415,8 +431,9 @@ const gcLine=gcOn?`<div class="mute">Game Changers: ${gcMain.length?`<b>${gcMain
 const vp=V?`<div class="vp" role="status"><div class="mute">${ruleText(F)}</div>${gcLine}${V.out.length?V.out.map(([l,t])=>`<div class="${l=='err'?'down':'warn'}">${l=='err'?'✖':'⚠'} ${t}</div>`).join(''):`<div class="up">✓ Legal for ${esc(F.n)}</div>`}${V.notes.map(t=>`<div class="up">${t}</div>`).join('')}</div>`:'';
 const okc=V?(V.out.some(z=>z[0]=='err')?'down':(F.max!=null?V.mn==F.max:F.min!=null?V.mn>=F.min:true)?'up':''):'';
 const info=deck?`<div class="mute"><b class="${okc}">${V.mn}${F.max!=null?' / '+F.max:F.min!=null?' (min '+F.min+')':''} main deck cards</b>${F.side!=null||V.sn?` · Sideboard ${V.sn}${F.side!=null?' / '+F.side:''}`:''}</div><div class="mute">${needN?`<button class="link need" data-needf="1" aria-pressed="${only}">${only?`Showing only the ${needN} card${needN>1?'s':''} you need to buy · ${money(need)}. Tap to show all`:`Still need ${needN} card${needN>1?'s':''} · ${money(need)} to buy. Tap to show only these`}</button>`:'You have every card in this deck'}${proxyN?` · ${proxyN} proxy card${proxyN>1?'s':''}`:''}</div>${vp}`:`<div class="mute">${n} cards, latest prices</div>`;
-app.innerHTML=`<div class="top"><button id="bk">Back to ${deck?'decks':'collections'}</button><button class="p" id="ad">Add card</button></div><h2>${star('c',c.id,c.favorite)}${esc(c.name)}</h2><div class="total">${money(total)}</div>${info}${fdd}${dd('Display',[['list','List'],['grid','Grid'],['text','Text only']],view,'data-v')}${gdd}${sdd}${erb}${body}`;
+app.innerHTML=`<div class="top"><button id="bk">Back to ${deck?'decks':'collections'}</button><button class="p" id="ad">Add card</button></div><h2>${star('c',c.id,c.favorite)}${esc(c.name)}</h2><div class="total">${money(total)}</div>${info}${fdd}${dd('Display',[['list','List'],['grid','Grid'],['text','Text only']],view,'data-v')}${gdd}${sdd}${erb}${bodyJ}${jumpHtml}`;
 if(ret){const y=ret;ret=0;requestAnimationFrame(()=>scrollTo(0,y))}else scrollTo(0,0);
+if(focusCard){const fc=focusCard;focusCard=null;requestAnimationFrame(()=>{const el=document.querySelector('[data-cid="'+fc+'"]');if(el){el.scrollIntoView({block:'center'});el.classList.add('hl');setTimeout(()=>el.classList.remove('hl'),2500)}})}
 app.querySelectorAll('[data-hist]').forEach(b=>b.onclick=()=>{const e=es.find(x=>x.id==b.dataset.hist);showHist(e,H[e.scryfall_id+e.finish]||[])});
 app.querySelectorAll('[data-swc]').forEach(b=>b.onclick=()=>cmdPicker(c,es,F,b.dataset.swc||null));
 app.querySelectorAll('[data-addc],[data-swcmp]').forEach(b=>b.onclick=()=>{ret=scrollY;compScreen(c,es,F)});
@@ -425,6 +442,9 @@ app.querySelectorAll('[data-fav]').forEach(b=>b.onclick=async()=>{const[k,id]=b.
 if(k=='c'){c.favorite=!c.favorite;await sb.from('collections').update({favorite:c.favorite}).eq('id',c.id)}
 else{const e=es.find(z=>z.id==id);await sb.from('entries').update({favorite:!e.favorite}).eq('id',id)}
 reopen(c)});
+app.querySelectorAll('[data-gd]').forEach(b=>b.onclick=async()=>{const[id,sid,fin]=b.dataset.gd.split('|'),r=await sb.from('collections').select('*').eq('id',id).single();if(r.data){focusCard=sid+'|'+fin;needOnly=false;open(r.data)}});
+app.querySelectorAll('.jtab').forEach(b=>b.onclick=()=>{const j=b.parentElement,m=j.querySelector('.jmenu');m.hidden=!m.hidden;j.classList.toggle('open',!m.hidden);b.setAttribute('aria-expanded',String(!m.hidden))});
+app.querySelectorAll('[data-jm]').forEach(b=>b.onclick=()=>{const el=document.getElementById('sec'+b.dataset.jm),j=b.closest('.jump');if(j){j.querySelector('.jmenu').hidden=true;j.classList.remove('open')}if(el)el.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'auto':'smooth',block:'start'})});
 app.querySelectorAll('[data-needf]').forEach(b=>b.onclick=()=>{needOnly=!needOnly;open(c)});
 app.querySelectorAll('[data-addp]').forEach(b=>b.onclick=()=>{ret=scrollY;partnerScreen(c,es,F)});
 app.querySelectorAll('[data-bd]').forEach(b=>b.onchange=async()=>{const e=es.find(z=>z.id==b.dataset.bd),u={board:b.value};if(b.value=='side')u.is_commander=false;await sb.from('entries').update(u).eq('id',e.id);reopen(c)});
@@ -456,19 +476,28 @@ document.body.appendChild(m);
 const close=()=>{m.remove();document.removeEventListener('keydown',onKey)},onKey=ev=>{if(ev.key=='Escape')close()};
 document.addEventListener('keydown',onKey);m.onclick=ev=>{if(ev.target==m)close()};$('hx').onclick=close;$('hx').focus();
 $('hcsv').onclick=()=>{const csv='Date,Price (USD)\n'+h.map(x=>x.d+','+x.usd.toFixed(2)).join('\n'),a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download=(e.name+' '+e.set_code+' '+e.finish+' prices.csv').replace(/[^\w. -]/g,'');a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}}
-function showPrintings(res,cards,rowFn,bindFn){
+function showPrintings(res,cards,rowFn,bindFn,owned){
 const m=new Map();cards.forEach(k=>{if(!m.has(k.set))m.set(k.set,{n:k.set_name,d:k.released_at||''})});
-const sets=[...m.entries()].sort((a,b)=>b[1].d.localeCompare(a[1].d)),sel=new Set();
-res.innerHTML=`<div class="dg"><span class="dl">Sets:</span><div class="dd"><button aria-haspopup="true" aria-expanded="false"></button><div class="ddm setm" role="group" aria-label="Choose sets" hidden><button class="sm" data-stclear="1">Show all sets</button>${sets.map(([cd,o])=>`<label class="ck"><input type="checkbox" data-st="${esc(cd)}"> ${esc(o.n)} (${esc(cd.toUpperCase())})</label>`).join('')}</div></div><span class="mute" data-cnt></span></div><div class="rl"></div>`;
+const sets=[...m.entries()].sort((a,b)=>b[1].d.localeCompare(a[1].d)),sel=new Set();let only=false;
+res.innerHTML=`<div class="dg" style="flex-wrap:wrap;row-gap:6px"><span class="dl">Sets:</span><div class="dd"><button aria-haspopup="true" aria-expanded="false"></button><div class="ddm setm" role="group" aria-label="Choose sets" hidden><div class="sq"><input type="search" data-sq="1" placeholder="Search sets by name or code" autocomplete="off" aria-label="Search sets"><button class="sm" data-stclear="1">Show all sets</button></div>${sets.map(([cd,o])=>`<label class="ck"><input type="checkbox" data-st="${esc(cd)}" data-nm="${esc((o.n+' '+cd).toLowerCase())}"> ${esc(o.n)} (${esc(cd.toUpperCase())})</label>`).join('')}<p class="mute" data-nos hidden style="padding:6px 10px">No sets match.</p></div></div>${owned?'<label class="ck2"><input type="checkbox" data-mine="1"> Only printings I already have</label>':''}<span class="mute" data-cnt></span></div><div class="rl"></div>`;
 const btn=res.querySelector('.dd>button'),menu=res.querySelector('.ddm'),list=res.querySelector('.rl'),cnt=res.querySelector('[data-cnt]');
-const draw=()=>{const vis=cards.map((k,i)=>[k,i]).filter(([k])=>!sel.size||sel.has(k.set));
-list.innerHTML=vis.map(([k,i])=>rowFn(k,i)).join('')||'<p class="mute">No printings in the chosen sets.</p>';
+const sq=menu.querySelector('[data-sq]'),nos=menu.querySelector('[data-nos]');
+const filt=()=>{const t=sq.value.trim().toLowerCase();let any=false;menu.querySelectorAll('[data-st]').forEach(i=>{const show=!t||i.dataset.nm.includes(t);i.parentElement.hidden=!show;if(show)any=true});nos.hidden=any};
+const draw=()=>{const vis=cards.map((k,i)=>[k,i]).filter(([k])=>(!sel.size||sel.has(k.set))&&(!only||owned.has(k.id)));
+list.innerHTML=vis.map(([k,i])=>rowFn(k,i)).join('')||'<p class="mute">No printings match these choices.</p>';
 const nm=sel.size==0?'All sets':sel.size==1?esc(m.get([...sel][0]).n):sel.size+' sets';
 btn.innerHTML=nm+' ▾';cnt.textContent=vis.length+' of '+cards.length+' printings';bindFn(list)};
 btn.onclick=()=>{menu.hidden=!menu.hidden;btn.setAttribute('aria-expanded',String(!menu.hidden))};
 menu.querySelectorAll('[data-st]').forEach(i=>i.onchange=()=>{if(i.checked)sel.add(i.dataset.st);else sel.delete(i.dataset.st);draw()});
-menu.querySelector('[data-stclear]').onclick=()=>{sel.clear();menu.querySelectorAll('[data-st]').forEach(i=>i.checked=false);draw()};
+sq.oninput=filt;
+sq.onkeydown=ev=>{if(ev.key=='Enter'){ev.preventDefault();const f=[...menu.querySelectorAll('[data-st]')].find(i=>!i.parentElement.hidden);if(f){f.checked=!f.checked;f.onchange();sq.value='';filt()}}};
+menu.querySelector('[data-stclear]').onclick=()=>{sel.clear();menu.querySelectorAll('[data-st]').forEach(i=>i.checked=false);sq.value='';filt();draw()};
+const oc=owned?res.querySelector('[data-mine]'):null;if(oc)oc.onchange=()=>{only=oc.checked;draw()};
 draw()}
+async function ownedPrintings(cards){const names=[...new Set(cards.map(k=>k.name))],out=new Set();if(!names.length)return out;
+const cs=await sb.from('collections').select('id').eq('kind','collection'),ids=(cs.data||[]).map(x=>x.id);if(!ids.length)return out;
+for(let i=0;i<names.length;i+=40){const r=await sb.from('entries').select('scryfall_id').in('collection_id',ids).in('name',names.slice(i,i+40));(r.data||[]).forEach(x=>out.add(x.scryfall_id))}
+return out}
 function search(){scrollTo(0,0);window._added={};app.innerHTML=`<div class="top"><button id="bk">Back to ${esc(cur.name)}</button></div><h2>Add a card</h2>${cur.kind=='deck'?'<label><input type="checkbox" id="own" checked style="width:auto;margin:0 6px 0 0">I own these cards</label> <label style="margin-left:12px">Add to <select id="ab" class="sm"><option value="main">Main Deck</option><option value="side">Sideboard</option></select></label>':''}<input id="q" autocomplete="off" placeholder="Exact card name, e.g. Sol Ring"><button class="p" id="go">Find printings</button><div id="res"></div>`;
 $('bk').onclick=()=>open(cur);$('go').onclick=find;$('q').onkeydown=e=>{if(e.key=='Enter')find()}}
 async function find(){const n=$('q').value.trim(),res=$('res');if(!n)return;res.innerHTML='<p class="mute">Searching…</p>';
@@ -479,7 +508,7 @@ const cards=(await r.json()).data;window._c=cards;
 const rowFn=(c,i)=>{const d=[c.full_art&&'full art',c.border_color=='borderless'&&'borderless',c.promo&&'promo',...(c.frame_effects||[])].filter(Boolean).join(', ');
 return`<div class="row" data-sid="${c.id}">${thumb(c.id,c.layout,0)}<div class="grow"><b>${esc(c.name)}</b><div class="mute">${esc(c.set_name)} (${c.set.toUpperCase()}) #${esc(c.collector_number)}${d?' · '+esc(d):''}</div></div>
 ${c.finishes.map(f=>{const on=(window._added||{})[c.id+'|'+f];return`<button data-a="${i}:${f}" aria-pressed="${!!on}">${on?'✓ Added · tap to remove':f+' '+money(+c.prices[COL[f]]||null)}</button>`}).join(' ')}</div>`};
-showPrintings(res,cards,rowFn,l=>l.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>add(b)))}
+showPrintings(res,cards,rowFn,l=>l.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>add(b)),await ownedPrintings(cards))}
 async function add(b){const[i,f]=b.dataset.a.split(':'),c=window._c[i],key=c.id+'|'+f;window._added=window._added||{};b.disabled=true;
 if(window._added[key]){const id=window._added[key].id;
 const r0=await sb.from('entries').select('qty').eq('id',id);
@@ -505,7 +534,7 @@ const tb=document.getElementById('top');
 addEventListener('scroll',()=>tb.classList.toggle('show',scrollY>300),{passive:true});
 tb.onclick=()=>scrollTo({top:0,behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'auto':'smooth'});
 const closeMenus=ex=>document.querySelectorAll('.ddm').forEach(m=>{if(m!==ex){m.hidden=true;m.previousElementSibling.setAttribute('aria-expanded','false')}});
-document.addEventListener('click',e=>{if(!e.target.closest('.dd'))closeMenus()});
-document.addEventListener('keydown',e=>{if(e.key=='Escape')closeMenus()});
+document.addEventListener('click',e=>{if(!e.target.closest('.dd'))closeMenus();if(!e.target.closest('.jump')){const j=document.querySelector('.jump');if(j){j.querySelector('.jmenu').hidden=true;j.classList.remove('open')}}});
+document.addEventListener('keydown',e=>{if(e.key=='Escape'){closeMenus();const j=document.querySelector('.jump');if(j){j.querySelector('.jmenu').hidden=true;j.classList.remove('open')}}});
 init();
 </script></body></html>
